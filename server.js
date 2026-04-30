@@ -10,7 +10,7 @@ const PDFKit   = require("pdfkit");
 const ExcelJS  = require("exceljs");
 
 const app  = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -18,10 +18,11 @@ app.use(express.static(__dirname));
 
 // ---- CONEXION A MYSQL ----
 const db = mysql.createConnection({
-    host:     "localhost",
-    user:     "root",
-    password: "Adamilca25",
-    database: "registro_grado"
+    host:     process.env.MYSQLHOST     || "localhost",
+    user:     process.env.MYSQLUSER     || "root",
+    password: process.env.MYSQLPASSWORD || "1234",
+    database: process.env.MYSQLDATABASE || "registro_grado",
+    port:     process.env.MYSQLPORT     || 3306
 });
 
 db.connect(function(err) {
@@ -177,10 +178,7 @@ app.put("/api/configuracion", function(req, res) {
 // =============================================
 app.get("/api/exportar/pdf/:tipo", function(req, res) {
     const tipo = req.params.tipo;
-
-    let sql = "";
-    let titulo = "";
-    let columnas = [];
+    let sql = "", titulo = "", columnas = [];
 
     if (tipo === "estudiantes") {
         sql = "SELECT nombre, matricula, grado, seccion, tutor, telefono FROM estudiantes ORDER BY nombre";
@@ -200,56 +198,34 @@ app.get("/api/exportar/pdf/:tipo", function(req, res) {
 
     db.query(sql, function(err, rows) {
         if (err) return res.status(500).json({ error: "Error al generar PDF." });
-
         const doc = new PDFKit({ margin: 40 });
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="${tipo}.pdf"`);
         doc.pipe(res);
-
-        // Encabezado
         doc.fontSize(18).fillColor("#0d2352").text(titulo, { align: "center" });
         doc.fontSize(10).fillColor("#666").text("Sistema de Registro de Grado Digital - MINERD", { align: "center" });
         doc.moveDown();
-
-        // Tabla encabezados
-        doc.fontSize(10).fillColor("#fff");
         const colW = (doc.page.width - 80) / columnas.length;
         let y = doc.y;
-
-        // Fondo encabezado
         doc.rect(40, y, doc.page.width - 80, 20).fill("#0d2352");
         columnas.forEach(function(col, i) {
-            doc.fillColor("#fff").text(col, 40 + i * colW + 4, y + 5, { width: colW - 8 });
+            doc.fillColor("#fff").fontSize(10).text(col, 40 + i * colW + 4, y + 5, { width: colW - 8 });
         });
         y += 22;
-
-        // Filas
         rows.forEach(function(row, idx) {
             const vals = Object.values(row);
-            const bg   = idx % 2 === 0 ? "#f4f7ff" : "#ffffff";
-            doc.rect(40, y, doc.page.width - 80, 18).fill(bg);
+            doc.rect(40, y, doc.page.width - 80, 18).fill(idx % 2 === 0 ? "#f4f7ff" : "#ffffff");
             vals.forEach(function(val, i) {
                 doc.fillColor("#333").fontSize(9).text(
                     val !== null && val !== undefined ? String(val) : "-",
-                    40 + i * colW + 4, y + 4,
-                    { width: colW - 8 }
+                    40 + i * colW + 4, y + 4, { width: colW - 8 }
                 );
             });
             y += 20;
-
-            // Nueva pagina si es necesario
-            if (y > doc.page.height - 60) {
-                doc.addPage();
-                y = 40;
-            }
+            if (y > doc.page.height - 60) { doc.addPage(); y = 40; }
         });
-
         doc.moveDown(2);
-        doc.fontSize(8).fillColor("#aaa").text(
-            "Generado el " + new Date().toLocaleDateString("es-DO"),
-            { align: "right" }
-        );
-
+        doc.fontSize(8).fillColor("#aaa").text("Generado el " + new Date().toLocaleDateString("es-DO"), { align: "right" });
         doc.end();
     });
 });
@@ -259,10 +235,7 @@ app.get("/api/exportar/pdf/:tipo", function(req, res) {
 // =============================================
 app.get("/api/exportar/excel/:tipo", async function(req, res) {
     const tipo = req.params.tipo;
-
-    let sql = "";
-    let titulo = "";
-    let columnas = [];
+    let sql = "", titulo = "", columnas = [];
 
     if (tipo === "estudiantes") {
         sql = "SELECT nombre, matricula, grado, seccion, tutor, telefono, direccion FROM estudiantes ORDER BY nombre";
@@ -282,45 +255,26 @@ app.get("/api/exportar/excel/:tipo", async function(req, res) {
 
     db.query(sql, async function(err, rows) {
         if (err) return res.status(500).json({ error: "Error al generar Excel." });
-
         const workbook  = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet(titulo);
-
-        // Encabezados con estilo
         worksheet.addRow(columnas);
         const headerRow = worksheet.getRow(1);
         headerRow.eachCell(function(cell) {
             cell.fill = { type:"pattern", pattern:"solid", fgColor:{ argb:"FF0D2352" } };
             cell.font = { bold:true, color:{ argb:"FFFFFFFF" }, size:11 };
             cell.alignment = { vertical:"middle", horizontal:"center" };
-            cell.border = {
-                top:    { style:"thin" }, left:  { style:"thin" },
-                bottom: { style:"thin" }, right: { style:"thin" }
-            };
+            cell.border = { top:{style:"thin"}, left:{style:"thin"}, bottom:{style:"thin"}, right:{style:"thin"} };
         });
         headerRow.height = 22;
-
-        // Filas de datos
         rows.forEach(function(row, idx) {
-            const vals     = Object.values(row).map(v => v !== null && v !== undefined ? v : "-");
-            const dataRow  = worksheet.addRow(vals);
-            const fillColor = idx % 2 === 0 ? "FFF4F7FF" : "FFFFFFFF";
+            const vals    = Object.values(row).map(v => v !== null && v !== undefined ? v : "-");
+            const dataRow = worksheet.addRow(vals);
             dataRow.eachCell(function(cell) {
-                cell.fill = { type:"pattern", pattern:"solid", fgColor:{ argb: fillColor } };
-                cell.border = {
-                    top:    { style:"thin", color:{ argb:"FFE0E0E0" } },
-                    left:   { style:"thin", color:{ argb:"FFE0E0E0" } },
-                    bottom: { style:"thin", color:{ argb:"FFE0E0E0" } },
-                    right:  { style:"thin", color:{ argb:"FFE0E0E0" } }
-                };
+                cell.fill = { type:"pattern", pattern:"solid", fgColor:{ argb: idx % 2 === 0 ? "FFF4F7FF" : "FFFFFFFF" } };
+                cell.border = { top:{style:"thin",color:{argb:"FFE0E0E0"}}, left:{style:"thin",color:{argb:"FFE0E0E0"}}, bottom:{style:"thin",color:{argb:"FFE0E0E0"}}, right:{style:"thin",color:{argb:"FFE0E0E0"}} };
             });
         });
-
-        // Ancho de columnas automático
-        worksheet.columns.forEach(function(col) {
-            col.width = 20;
-        });
-
+        worksheet.columns.forEach(function(col) { col.width = 20; });
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.setHeader("Content-Disposition", `attachment; filename="${tipo}.xlsx"`);
         await workbook.xlsx.write(res);
