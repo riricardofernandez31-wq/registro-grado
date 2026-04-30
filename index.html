@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digitalizacion del Registro de Grado - MINERD</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div class="login-container" id="loginContainer">
+    <div class="login-backdrop"></div>
+    <div class="login-box">
+        <div class="logo-section">
+            <div class="logo-badge"><span class="logo-icon">&#127983;</span></div>
+            <h1 id="loginNombreCentro">Registro de Grado Digital</h1>
+            <p>Sistema Centralizado de Gestion Escolar · MINERD</p>
+        </div>
+        <form id="loginForm">
+            <div class="input-group">
+                <label for="usuario">Usuario</label>
+                <input type="text" id="usuario" placeholder="Ej: admin" required>
+            </div>
+            <div class="input-group">
+                <label for="password">Contrasena</label>
+                <input type="password" id="password" placeholder="••••••••" required>
+            </div>
+            <div id="loginError" class="login-error" style="display:none">
+                Usuario o contrasena incorrectos.
+            </div>
+            <button type="submit" class="btn-login">Iniciar Sesion</button>
+        </form>
+        <p class="login-hint">Usuario de prueba: <strong>admin</strong> · Contrasena: <strong>1234</strong></p>
+    </div>
+</div>
+
+<!-- ===================== DASHBOARD ===================== -->
+<div class="app-layout" id="dashboard" style="display:none;">
+
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <span class="sidebar-icon">&#127983;</span>
+            <span class="sidebar-title" id="sidebarNombreCentro">Registro<br>de Grado</span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="#" class="nav-item active" data-section="inicio">
+                <span class="nav-icon">&#128202;</span> Panel Principal
+            </a>
+            <a href="#" class="nav-item" data-section="estudiantes">
+                <span class="nav-icon">&#128100;</span> Estudiantes
+            </a>
+            <a href="#" class="nav-item" data-section="calificaciones">
+                <span class="nav-icon">&#128221;</span> Calificaciones
+            </a>
+            <a href="#" class="nav-item" data-section="asistencia">
+                <span class="nav-icon">&#128197;</span> Asistencia
+            </a>
+            <a href="#" class="nav-item" data-section="reportes">
+                <span class="nav-icon">&#128196;</span> Reportes
+            </a>
+            <a href="#" class="nav-item" data-section="usuarios">
+                <span class="nav-icon">&#128101;</span> Usuarios
+            </a>
+            <a href="#" class="nav-item" data-section="configuracion">
+                <span class="nav-icon">&#9881;&#65039;</span> Configuracion
+            </a>
+        </nav>
+        <button class="btn-logout" id="btnLogout">Cerrar Sesion</button>
+    </aside>
+
+    <main class="main-content">
+        <header class="topbar">
+            <div>
+                <h2 id="sectionTitle">Panel Principal</h2>
+                <p id="welcomeMsg">Bienvenido al Sistema de Gestion Escolar</p>
+            </div>
+            <div class="topbar-user">
+                <span class="user-badge" id="userRolBadge">Director</span>
+                <span id="userNameDisplay">admin</span>
+            </div>
+        </header>
+
+        <!-- INICIO -->
+        <section id="sec-inicio" class="section active">
+            <div class="cards">
+                <div class="card card-blue">
+                    <div class="card-icon">&#128100;</div>
+                    <h3 id="totalEstudiantes">0</h3>
+                    <p>Estudiantes Registrados</p>
+                </div>
+                <div class="card card-green">
+                    <div class="card-icon">&#9989;</div>
+                    <h3>92%</h3>
+                    <p>Asistencia de Hoy</p>
+                </div>
+                <div class="card card-purple">
+                    <div class="card-icon">&#128200;</div>
+                    <h3>87%</h3>
+                    <p>Promedio General</p>
+                </div>
+                <div class="card card-red">
+                    <div class="card-icon">&#9888;&#65039;</div>
+                    <h3>14</h3>
+                    <p>Alertas Academicas</p>
+                </div>
+            </div>
+            <div class="panel">
+                <h3 class="panel-title">Estudiantes registrados recientemente</h3>
+                <table class="data-table">
+                    <thead><tr><th>Nombre</th><th>Matricula</th><th>Grado</th><th>Seccion</th></tr></thead>
+                    <tbody id="tablaRecientes">
+                        <tr><td colspan="4" class="empty-row">No hay estudiantes registrados aun.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ESTUDIANTES -->
+        <section id="sec-estudiantes" class="section">
+            <div class="panel">
+                <h3 class="panel-title">Registrar Nuevo Estudiante</h3>
+                <form id="formEstudiante" class="form-grid">
+                    <div class="field"><label>Nombre Completo *</label><input type="text" id="est-nombre" placeholder="Ej: Maria Garcia Perez" required></div>
+                    <div class="field"><label>Matricula *</label><input type="text" id="est-matricula" placeholder="Ej: 2024-0001" required></div>
+                    <div class="field">
+                        <label>Grado *</label>
+                        <select id="est-grado" required>
+                            <option value="">Seleccione grado</option>
+                            <option>1ro</option><option>2do</option><option>3ro</option>
+                            <option>4to</option><option>5to</option><option>6to</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Seccion</label>
+                        <select id="est-seccion">
+                            <option value="">Seleccione seccion</option>
+                            <option>A</option><option>B</option><option>C</option><option>D</option>
+                        </select>
+                    </div>
+                    <div class="field"><label>Tutor Responsable</label><input type="text" id="est-tutor" placeholder="Nombre del tutor"></div>
+                    <div class="field"><label>Telefono</label><input type="tel" id="est-telefono" placeholder="809-000-0000"></div>
+                    <div class="field field-full"><label>Direccion</label><input type="text" id="est-direccion" placeholder="Calle, sector, municipio"></div>
+                    <div class="field field-full"><label>Observaciones</label><textarea id="est-observaciones" placeholder="Observaciones adicionales..."></textarea></div>
+                    <div class="field field-full form-actions"><button type="submit" class="btn-primary">Guardar Estudiante</button></div>
+                </form>
+                <div id="msgEstudiante" class="msg-success" style="display:none">Estudiante guardado exitosamente.</div>
+            </div>
+            <div class="panel" style="margin-top:24px">
+                <h3 class="panel-title">Lista de Estudiantes</h3>
+                <table class="data-table">
+                    <thead><tr><th>Nombre</th><th>Matricula</th><th>Grado</th><th>Seccion</th><th>Tutor</th></tr></thead>
+                    <tbody id="tablaEstudiantes"><tr><td colspan="5" class="empty-row">No hay estudiantes registrados.</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- CALIFICACIONES -->
+        <section id="sec-calificaciones" class="section">
+            <div class="panel">
+                <h3 class="panel-title">Registrar Calificaciones</h3>
+                <form id="formCalificaciones" class="form-grid">
+                    <div class="field">
+                        <label>Estudiante *</label>
+                        <select id="cal-estudiante" required><option value="">Seleccione estudiante</option></select>
+                    </div>
+                    <div class="field">
+                        <label>Asignatura *</label>
+                        <select id="cal-asignatura" required>
+                            <option value="">Seleccione asignatura</option>
+                            <option>Lengua Espanola</option><option>Matematica</option>
+                            <option>Ciencias de la Naturaleza</option><option>Ciencias Sociales</option>
+                            <option>Formacion Integral</option><option>Ingles</option>
+                            <option>Educacion Fisica</option><option>Educacion Artistica</option>
+                        </select>
+                    </div>
+                    <div class="field"><label>Competencia</label><input type="text" id="cal-competencia" placeholder="Ej: Comunicativa y Cultural"></div>
+                    <div class="field"><label>Parcial 1 (0-100)</label><input type="number" id="cal-p1" min="0" max="100" placeholder="Ej: 85"></div>
+                    <div class="field"><label>Parcial 2 (0-100)</label><input type="number" id="cal-p2" min="0" max="100" placeholder="Ej: 90"></div>
+                    <div class="field"><label>Calificacion Final</label><input type="number" id="cal-final" min="0" max="100" placeholder="Promedio automatico"></div>
+                    <div class="field field-full"><label>Observaciones Academicas</label><textarea id="cal-obs" placeholder="Notas sobre el desempeno..."></textarea></div>
+                    <div class="field field-full form-actions"><button type="submit" class="btn-primary">Guardar Calificacion</button></div>
+                </form>
+                <div id="msgCalificacion" class="msg-success" style="display:none">Calificacion guardada exitosamente.</div>
+            </div>
+            <div class="panel" style="margin-top:24px">
+                <h3 class="panel-title">Registro de Calificaciones</h3>
+                <table class="data-table">
+                    <thead><tr><th>Estudiante</th><th>Asignatura</th><th>Parcial 1</th><th>Parcial 2</th><th>Final</th></tr></thead>
+                    <tbody id="tablaCalificaciones"><tr><td colspan="5" class="empty-row">No hay calificaciones registradas.</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ASISTENCIA -->
+        <section id="sec-asistencia" class="section">
+            <div class="panel">
+                <h3 class="panel-title">Control de Asistencia - <span id="fechaHoy"></span></h3>
+                <p style="color:#666; margin-bottom:20px; font-size:14px">Registre la asistencia diaria de los estudiantes.</p>
+                <div id="listaAsistencia"><p class="empty-row">Registre estudiantes primero para tomar asistencia.</p></div>
+                <div class="form-actions" style="margin-top:20px">
+                    <button class="btn-primary" id="btnGuardarAsistencia">Guardar Asistencia del Dia</button>
+                </div>
+                <div id="msgAsistencia" class="msg-success" style="display:none">Asistencia guardada exitosamente.</div>
+            </div>
+        </section>
+
+        <!-- REPORTES -->
+        <section id="sec-reportes" class="section">
+            <div class="panel">
+                <h3 class="panel-title">Reportes Academicos</h3>
+                <p style="color:#666; font-size:14px; margin-bottom:24px">Consulte y exporte informacion academica del sistema.</p>
+                <div class="reports-grid">
+                    <div class="report-card" onclick="generarReporte('estudiantes')">
+                        <div class="report-icon">&#128100;</div>
+                        <h4>Listado de Estudiantes</h4>
+                        <p>Ver todos los estudiantes registrados</p>
+                    </div>
+                    <div class="report-card" onclick="generarReporte('calificaciones')">
+                        <div class="report-icon">&#128221;</div>
+                        <h4>Reporte de Notas</h4>
+                        <p>Calificaciones por asignatura y periodo</p>
+                    </div>
+                    <div class="report-card" onclick="generarReporte('asistencia')">
+                        <div class="report-icon">&#128197;</div>
+                        <h4>Reporte de Asistencia</h4>
+                        <p>Historial de asistencia diaria</p>
+                    </div>
+                </div>
+                <div id="reporteContenido" style="margin-top:24px"></div>
+            </div>
+        </section>
+
+        <!-- USUARIOS -->
+        <section id="sec-usuarios" class="section">
+            <div class="panel">
+                <h3 class="panel-title">Agregar Nuevo Usuario</h3>
+                <form id="formUsuario" class="form-grid">
+                    <div class="field"><label>Nombre Completo *</label><input type="text" id="usr-nombre" placeholder="Ej: Maria Gonzalez" required></div>
+                    <div class="field"><label>Usuario *</label><input type="text" id="usr-usuario" placeholder="Ej: mgonzalez" required></div>
+                    <div class="field"><label>Contrasena *</label><input type="password" id="usr-password" placeholder="••••••••" required></div>
+                    <div class="field">
+                        <label>Rol *</label>
+                        <select id="usr-rol" required>
+                            <option value="">Seleccione rol</option>
+                            <option value="director">Director</option>
+                            <option value="docente">Docente</option>
+                            <option value="coordinador">Coordinador</option>
+                            <option value="secretaria">Secretaria</option>
+                            <option value="admin">Administrador</option>
+                        </select>
+                    </div>
+                    <div class="field field-full form-actions"><button type="submit" class="btn-primary">Crear Usuario</button></div>
+                </form>
+                <div id="msgUsuario" class="msg-success" style="display:none">Usuario creado exitosamente.</div>
+            </div>
+            <div class="panel" style="margin-top:24px">
+                <h3 class="panel-title">Usuarios del Sistema</h3>
+                <table class="data-table">
+                    <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Accion</th></tr></thead>
+                    <tbody id="tablaUsuarios"><tr><td colspan="4" class="empty-row">Cargando...</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- CONFIGURACION -->
+        <section id="sec-configuracion" class="section">
+            <div class="panel">
+                <h3 class="panel-title">Configuracion Institucional</h3>
+                <form id="formConfiguracion" class="form-grid">
+                    <div class="field field-full">
+                        <label>Nombre del Centro Educativo *</label>
+                        <input type="text" id="cfg-nombre" placeholder="Ej: Escuela Primaria Juan Pablo Duarte" required>
+                    </div>
+                    <div class="field">
+                        <label>Ano Escolar *</label>
+                        <input type="text" id="cfg-anio" placeholder="Ej: 2025-2026" required>
+                    </div>
+                    <div class="field">
+                        <label>Director(a)</label>
+                        <input type="text" id="cfg-director" placeholder="Nombre del director">
+                    </div>
+                    <div class="field">
+                        <label>Telefono</label>
+                        <input type="tel" id="cfg-telefono" placeholder="809-000-0000">
+                    </div>
+                    <div class="field">
+                        <label>Distrito Educativo</label>
+                        <input type="text" id="cfg-distrito" placeholder="Ej: 15-04">
+                    </div>
+                    <div class="field">
+                        <label>Regional Educativa</label>
+                        <input type="text" id="cfg-regional" placeholder="Ej: Regional 15 Santo Domingo">
+                    </div>
+                    <div class="field field-full">
+                        <label>Direccion del Centro</label>
+                        <input type="text" id="cfg-direccion" placeholder="Calle, sector, municipio">
+                    </div>
+                    <div class="field field-full form-actions">
+                        <button type="submit" class="btn-primary">Guardar Configuracion</button>
+                    </div>
+                </form>
+                <div id="msgConfiguracion" class="msg-success" style="display:none">Configuracion guardada exitosamente.</div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
