@@ -3,7 +3,7 @@
 //  script.js
 // =============================================
 
-const API = "http://localhost:3000/api";
+const API = "https://registro-grado-production.up.railway.app/api";
 let usuarioActual    = null;
 let estudiantesCache = [];
 
