@@ -592,6 +592,24 @@ app.post("/api/participaciones", function(req, res) {
 });
 
 // =============================================
+//  DIAGNOSTICO TEMPORAL (eliminar después de verificar)
+// =============================================
+app.get("/api/db-check", function(req, res) {
+    db.query("DESCRIBE estudiantes", function(err, cols) {
+        if (err) return res.json({ error: err.message });
+        db.query("SELECT COUNT(*) AS total FROM estudiantes", function(err2, cnt) {
+            db.query("SELECT id, nombre, grado, seccion, matricula, cedula, fecha_nacimiento, sexo, parentesco_tutor FROM estudiantes WHERE activo=1 ORDER BY id DESC LIMIT 10", function(err3, rows) {
+                res.json({
+                    columnas: cols.map(function(c){ return { nombre: c.Field, tipo: c.Type, nulo: c.Null }; }),
+                    total_activos: err2 ? err2.message : cnt[0].total,
+                    ultimos_10: err3 ? err3.message : rows
+                });
+            });
+        });
+    });
+});
+
+// =============================================
 //  INICIAR SERVIDOR
 // =============================================
 app.listen(PORT, function() {
