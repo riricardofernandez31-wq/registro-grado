@@ -3,6 +3,7 @@
 //  server.js
 // =============================================
 
+require("dotenv").config();
 const express  = require("express");
 const mysql    = require("mysql2");
 const cors     = require("cors");
@@ -17,17 +18,186 @@ app.use(express.json());
 app.use(express.static(__dirname));
 
 // ---- CONEXION A MYSQL ----
-const db = mysql.createConnection({
-    host:     process.env.MYSQLHOST,
-    user:     process.env.MYSQLUSER,
-    password: process.env.MYSQLPASSWORD,
-    database: process.env.MYSQLDATABASE,
-    port:     parseInt(process.env.MYSQLPORT)
+const db = mysql.createPool({
+    host:               process.env.MYSQLHOST,
+    user:               process.env.MYSQLUSER,
+    password:           process.env.MYSQLPASSWORD,
+    database:           process.env.MYSQLDATABASE,
+    port:               parseInt(process.env.MYSQLPORT),
+    ssl:                { rejectUnauthorized: false },
+    waitForConnections: true,
+    connectionLimit:    10,
+    queueLimit:         0
 });
 
-db.connect(function(err) {
+function initDB() {
+    const tablas = [
+        `CREATE TABLE IF NOT EXISTS configuracion (
+            id            INT           NOT NULL AUTO_INCREMENT,
+            nombre_centro VARCHAR(200)  NOT NULL DEFAULT 'Centro Educativo',
+            anio_escolar  VARCHAR(20)   NOT NULL DEFAULT '2025-2026',
+            director      VARCHAR(150),
+            direccion     VARCHAR(300),
+            telefono      VARCHAR(20),
+            distrito      VARCHAR(100),
+            regional      VARCHAR(100),
+            creado_en     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+        `CREATE TABLE IF NOT EXISTS usuarios (
+            id        INT          NOT NULL AUTO_INCREMENT,
+            nombre    VARCHAR(150) NOT NULL,
+            usuario   VARCHAR(50)  NOT NULL,
+            password  VARCHAR(255) NOT NULL,
+            rol       ENUM('admin','director','docente','coordinador','secretaria') NOT NULL DEFAULT 'docente',
+            activo    TINYINT(1)   NOT NULL DEFAULT 1,
+            creado_en TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_usuario (usuario)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+        `CREATE TABLE IF NOT EXISTS aulas (
+            id           INT         NOT NULL AUTO_INCREMENT,
+            grado        ENUM('1ro','2do','3ro','4to','5to','6to') NOT NULL,
+            seccion      ENUM('A','B','C','D')                     NOT NULL,
+            anio_escolar VARCHAR(20) NOT NULL DEFAULT '2025-2026',
+            aula_numero  VARCHAR(20)          DEFAULT NULL,
+            capacidad    TINYINT UNSIGNED     DEFAULT 35,
+            creado_en    TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_aula (grado, seccion, anio_escolar)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+        `CREATE TABLE IF NOT EXISTS maestros (
+            id           INT          NOT NULL AUTO_INCREMENT,
+            usuario_id   INT                   DEFAULT NULL,
+            nombre       VARCHAR(150) NOT NULL,
+            cedula       VARCHAR(20)           DEFAULT NULL,
+            especialidad VARCHAR(100)          DEFAULT NULL,
+            telefono     VARCHAR(20)           DEFAULT NULL,
+            email        VARCHAR(100)          DEFAULT NULL,
+            activo       TINYINT(1)   NOT NULL DEFAULT 1,
+            creado_en    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_cedula (cedula),
+            CONSTRAINT fk_maestro_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios (id)
+                ON DELETE SET NULL ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+        `CREATE TABLE IF NOT EXISTS asignaciones (
+            id           INT          NOT NULL AUTO_INCREMENT,
+            maestro_id   INT          NOT NULL,
+            aula_id      INT          NOT NULL,
+            asignatura   VARCHAR(100) NOT NULL,
+            anio_escolar VARCHAR(20)  NOT NULL DEFAULT '2025-2026',
+            creado_en    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_asignacion (aula_id, asignatura, anio_escolar),
+            CONSTRAINT fk_asign_maestro FOREIGN KEY (maestro_id) REFERENCES maestros (id)
+                ON DELETE CASCADE ON UPDATE CASCADE,
+            CONSTRAINT fk_asign_aula    FOREIGN KEY (aula_id)    REFERENCES aulas (id)
+                ON DELETE CASCADE ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+        `CREATE TABLE IF NOT EXISTS estudiantes (
+            id            INT          NOT NULL AUTO_INCREMENT,
+            aula_id       INT                   DEFAULT NULL,
+            nombre        VARCHAR(150) NOT NULL,
+            matricula     VARCHAR(50)  NOT NULL,
+            grado         ENUM('1ro','2do','3ro','4to','5to','6to') NOT NULL,
+            seccion       ENUM('A','B','C','D')  DEFAULT NULL,
+            tutor         VARCHAR(150)           DEFAULT NULL,
+            telefono      VARCHAR(20)            DEFAULT NULL,
+            direccion     VARCHAR(300)           DEFAULT NULL,
+            observaciones TEXT                   DEFAULT NULL,
+            activo        TINYINT(1)   NOT NULL DEFAULT 1,
+            creado_en     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_matricula (matricula),
+            CONSTRAINT fk_estudiante_aula FOREIGN KEY (aula_id) REFERENCES aulas (id)
+                ON DELETE SET NULL ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+        `CREATE TABLE IF NOT EXISTS calificaciones (
+            id             INT            NOT NULL AUTO_INCREMENT,
+            estudiante_id  INT            NOT NULL,
+            asignacion_id  INT                     DEFAULT NULL,
+            asignatura     VARCHAR(100)   NOT NULL,
+            competencia    VARCHAR(200)            DEFAULT NULL,
+            parcial_1      DECIMAL(5,2)            DEFAULT NULL,
+            parcial_2      DECIMAL(5,2)            DEFAULT NULL,
+            final          DECIMAL(5,2)            DEFAULT NULL,
+            observaciones  TEXT                    DEFAULT NULL,
+            anio_escolar   VARCHAR(20)             DEFAULT '2025-2026',
+            creado_en      TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            CONSTRAINT fk_calif_estudiante FOREIGN KEY (estudiante_id) REFERENCES estudiantes (id)
+                ON DELETE CASCADE ON UPDATE CASCADE,
+            CONSTRAINT fk_calif_asignacion FOREIGN KEY (asignacion_id) REFERENCES asignaciones (id)
+                ON DELETE SET NULL ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+        `CREATE TABLE IF NOT EXISTS asistencia (
+            id             INT       NOT NULL AUTO_INCREMENT,
+            estudiante_id  INT       NOT NULL,
+            aula_id        INT                DEFAULT NULL,
+            registrado_por INT                DEFAULT NULL,
+            fecha          DATE      NOT NULL,
+            estado         ENUM('presente','ausente','tardanza','excusa') NOT NULL DEFAULT 'presente',
+            observacion    TEXT               DEFAULT NULL,
+            creado_en      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_asistencia_dia (estudiante_id, fecha),
+            CONSTRAINT fk_asist_estudiante  FOREIGN KEY (estudiante_id)  REFERENCES estudiantes (id)
+                ON DELETE CASCADE ON UPDATE CASCADE,
+            CONSTRAINT fk_asist_aula        FOREIGN KEY (aula_id)        REFERENCES aulas (id)
+                ON DELETE SET NULL ON UPDATE CASCADE,
+            CONSTRAINT fk_asist_usuario     FOREIGN KEY (registrado_por) REFERENCES usuarios (id)
+                ON DELETE SET NULL ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+    ];
+
+    const datos = [
+        `INSERT IGNORE INTO configuracion (id, nombre_centro, anio_escolar, director, distrito, regional)
+         VALUES (1, 'Centro Educativo', '2025-2026', '', '', '')`,
+        `INSERT IGNORE INTO usuarios (nombre, usuario, password, rol)
+         VALUES ('Administrador', 'admin', 'admin123', 'admin')`
+    ];
+
+    db.query("SET FOREIGN_KEY_CHECKS = 0", function() {
+        let i = 0;
+        function next() {
+            if (i >= tablas.length) {
+                let j = 0;
+                function nextDato() {
+                    if (j >= datos.length) {
+                        db.query("SET FOREIGN_KEY_CHECKS = 1", function() {
+                            console.log("Base de datos inicializada correctamente.");
+                        });
+                        return;
+                    }
+                    db.query(datos[j], function(err) {
+                        if (err) console.error("Error insertando datos iniciales:", err.message);
+                        j++; nextDato();
+                    });
+                }
+                nextDato();
+                return;
+            }
+            db.query(tablas[i], function(err) {
+                if (err) console.error("Error creando tabla:", err.message);
+                i++; next();
+            });
+        }
+        next();
+    });
+}
+
+db.query("SELECT 1", function(err) {
     if (err) { console.error("Error conectando a MySQL:", err.message); return; }
     console.log("Conectado a MySQL correctamente.");
+    initDB();
 });
 
 // =============================================
@@ -39,7 +209,7 @@ app.post("/api/login", function(req, res) {
         return res.status(400).json({ error: "Faltan campos." });
     db.query("SELECT id, nombre, rol FROM usuarios WHERE usuario = ? AND password = ?",
         [usuario, password], function(err, results) {
-            if (err) return res.status(500).json({ error: "Error en servidor." });
+            if (err) { console.error("Error en login:", err.message); return res.status(500).json({ error: "Error en servidor.", detalle: err.message }); }
             if (results.length === 0)
                 return res.status(401).json({ error: "Usuario o contrasena incorrectos." });
             res.json({ ok: true, usuario: results[0] });
