@@ -174,10 +174,18 @@ function initDB() {
     ];
 
     const alteraciones = [
-        `ALTER TABLE estudiantes ADD COLUMN cedula           VARCHAR(20)   DEFAULT NULL`,
-        `ALTER TABLE estudiantes ADD COLUMN fecha_nacimiento DATE          DEFAULT NULL`,
-        `ALTER TABLE estudiantes ADD COLUMN sexo             ENUM('M','F') DEFAULT NULL`,
-        `ALTER TABLE estudiantes ADD COLUMN parentesco_tutor VARCHAR(50)   DEFAULT NULL`
+        `ALTER TABLE estudiantes ADD COLUMN aula_id          INT                   DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN cedula           VARCHAR(20)           DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN fecha_nacimiento DATE                  DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN sexo             ENUM('M','F')         DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN seccion          ENUM('A','B','C','D') DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN tutor            VARCHAR(150)          DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN parentesco_tutor VARCHAR(50)           DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN telefono         VARCHAR(20)           DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN direccion        VARCHAR(300)          DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN observaciones    TEXT                  DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN activo           TINYINT(1) NOT NULL DEFAULT 1`,
+        `ALTER TABLE estudiantes ADD COLUMN creado_en        TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP`
     ];
 
     const datos = [
