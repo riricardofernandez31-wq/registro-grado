@@ -148,6 +148,10 @@ async function cargarDashboard() {
     try {
         const res  = await fetch(`${API}/estudiantes`);
         const data = await res.json();
+        if (!res.ok || !Array.isArray(data)) {
+            console.error("Dashboard error:", data.detalle || data.error || data);
+            return;
+        }
         estudiantesCache = data;
         document.getElementById("totalEstudiantes").textContent = data.length;
         const tbody     = document.getElementById("tablaRecientes");
@@ -240,6 +244,10 @@ async function cargarTablaEstudiantes() {
     try {
         const res  = await fetch(`${API}/estudiantes`);
         const data = await res.json();
+        if (!res.ok || !Array.isArray(data)) {
+            console.error("Estudiantes error:", data.detalle || data.error || data);
+            return;
+        }
         estudiantesCache = data;
         const tbody = document.getElementById("tablaEstudiantes");
         if (data.length === 0) {
@@ -272,6 +280,7 @@ async function cargarSelectEstudiantes() {
     try {
         const res  = await fetch(`${API}/estudiantes`);
         const data = await res.json();
+        if (!res.ok || !Array.isArray(data)) return;
         estudiantesCache = data;
         const select = document.getElementById("cal-estudiante");
         select.innerHTML = '<option value="">Seleccione estudiante</option>';
@@ -345,6 +354,7 @@ async function cargarAsistencia() {
     try {
         const res  = await fetch(`${API}/estudiantes`);
         const data = await res.json();
+        if (!res.ok || !Array.isArray(data)) return;
         estudiantesCache = data;
         const contenedor = document.getElementById("listaAsistencia");
         if (data.length === 0) {
@@ -580,9 +590,13 @@ async function buscarEstudiantes() {
     const contenedor = document.getElementById("busqueda-resultados");
     contenedor.innerHTML = '<p style="color:#888;padding:12px 0">Buscando...</p>';
     try {
-        const res  = await fetch(`${API}/buscar?${params.toString()}`);
+        const res  = await fetch(`${API}/estudiantes/buscar?${params.toString()}`);
         const data = await res.json();
-        if (data.length === 0) {
+        if (!res.ok) {
+            contenedor.innerHTML = '<p class="empty-row">Error del servidor: ' + (data.detalle || data.error || res.status) + '</p>';
+            return;
+        }
+        if (!Array.isArray(data) || data.length === 0) {
             contenedor.innerHTML = '<p class="empty-row">No se encontraron estudiantes.</p>';
             return;
         }
@@ -608,7 +622,7 @@ async function buscarEstudiantes() {
             </table>
             </div>`;
     } catch (err) {
-        contenedor.innerHTML = '<p class="empty-row">Error al buscar estudiantes.</p>';
+        contenedor.innerHTML = '<p class="empty-row">Error al buscar: ' + err.message + '</p>';
     }
 }
 

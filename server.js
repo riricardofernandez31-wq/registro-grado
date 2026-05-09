@@ -101,18 +101,22 @@ function initDB() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
         `CREATE TABLE IF NOT EXISTS estudiantes (
-            id            INT          NOT NULL AUTO_INCREMENT,
-            aula_id       INT                   DEFAULT NULL,
-            nombre        VARCHAR(150) NOT NULL,
-            matricula     VARCHAR(50)  NOT NULL,
-            grado         ENUM('1ro','2do','3ro','4to','5to','6to') NOT NULL,
-            seccion       ENUM('A','B','C','D')  DEFAULT NULL,
-            tutor         VARCHAR(150)           DEFAULT NULL,
-            telefono      VARCHAR(20)            DEFAULT NULL,
-            direccion     VARCHAR(300)           DEFAULT NULL,
-            observaciones TEXT                   DEFAULT NULL,
-            activo        TINYINT(1)   NOT NULL DEFAULT 1,
-            creado_en     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            id               INT          NOT NULL AUTO_INCREMENT,
+            aula_id          INT                   DEFAULT NULL,
+            nombre           VARCHAR(150) NOT NULL,
+            matricula        VARCHAR(50)  NOT NULL,
+            cedula           VARCHAR(20)           DEFAULT NULL,
+            fecha_nacimiento DATE                  DEFAULT NULL,
+            sexo             ENUM('M','F')         DEFAULT NULL,
+            grado            ENUM('1ro','2do','3ro','4to','5to','6to') NOT NULL,
+            seccion          ENUM('A','B','C','D') DEFAULT NULL,
+            tutor            VARCHAR(150)          DEFAULT NULL,
+            parentesco_tutor VARCHAR(50)           DEFAULT NULL,
+            telefono         VARCHAR(20)           DEFAULT NULL,
+            direccion        VARCHAR(300)          DEFAULT NULL,
+            observaciones    TEXT                  DEFAULT NULL,
+            activo           TINYINT(1)   NOT NULL DEFAULT 1,
+            creado_en        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             UNIQUE KEY uq_matricula (matricula),
             CONSTRAINT fk_estudiante_aula FOREIGN KEY (aula_id) REFERENCES aulas (id)
@@ -169,11 +173,14 @@ function initDB() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
     ];
 
+    const alteraciones = [
+        `ALTER TABLE estudiantes ADD COLUMN cedula           VARCHAR(20)   DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN fecha_nacimiento DATE          DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN sexo             ENUM('M','F') DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN parentesco_tutor VARCHAR(50)   DEFAULT NULL`
+    ];
+
     const datos = [
-        `ALTER TABLE estudiantes ADD COLUMN IF NOT EXISTS cedula VARCHAR(20) DEFAULT NULL`,
-        `ALTER TABLE estudiantes ADD COLUMN IF NOT EXISTS fecha_nacimiento DATE DEFAULT NULL`,
-        `ALTER TABLE estudiantes ADD COLUMN IF NOT EXISTS sexo ENUM('M','F') DEFAULT NULL`,
-        `ALTER TABLE estudiantes ADD COLUMN IF NOT EXISTS parentesco_tutor VARCHAR(50) DEFAULT NULL`,
         `INSERT IGNORE INTO configuracion (id, nombre_centro, anio_escolar, director, distrito, regional)
          VALUES (1, 'Centro Educativo', '2025-2026', '', '', '')`,
         `INSERT IGNORE INTO usuarios (nombre, usuario, password, rol)
@@ -184,20 +191,34 @@ function initDB() {
         let i = 0;
         function next() {
             if (i >= tablas.length) {
-                let j = 0;
-                function nextDato() {
-                    if (j >= datos.length) {
-                        db.query("SET FOREIGN_KEY_CHECKS = 1", function() {
-                            console.log("Base de datos inicializada correctamente.");
-                        });
+                // Phase 2: add new columns to existing tables (ignore ER_DUP_FIELDNAME = 1060)
+                let a = 0;
+                function nextAlter() {
+                    if (a >= alteraciones.length) {
+                        // Phase 3: seed data
+                        let j = 0;
+                        function nextDato() {
+                            if (j >= datos.length) {
+                                db.query("SET FOREIGN_KEY_CHECKS = 1", function() {
+                                    console.log("Base de datos inicializada correctamente.");
+                                });
+                                return;
+                            }
+                            db.query(datos[j], function(err) {
+                                if (err) console.error("Error en datos iniciales:", err.message);
+                                j++; nextDato();
+                            });
+                        }
+                        nextDato();
                         return;
                     }
-                    db.query(datos[j], function(err) {
-                        if (err) console.error("Error insertando datos iniciales:", err.message);
-                        j++; nextDato();
+                    db.query(alteraciones[a], function(err) {
+                        if (err && err.errno !== 1060)
+                            console.error("Error en ALTER TABLE:", err.message);
+                        a++; nextAlter();
                     });
                 }
-                nextDato();
+                nextAlter();
                 return;
             }
             db.query(tablas[i], function(err) {
@@ -236,7 +257,28 @@ app.post("/api/login", function(req, res) {
 // =============================================
 app.get("/api/estudiantes", function(req, res) {
     db.query("SELECT * FROM estudiantes WHERE activo = 1 ORDER BY creado_en DESC", function(err, results) {
-        if (err) return res.status(500).json({ error: "Error al obtener estudiantes." });
+        if (err) { console.error("GET /api/estudiantes:", err.message); return res.status(500).json({ error: "Error al obtener estudiantes.", detalle: err.message }); }
+        res.json(results);
+    });
+});
+
+// --- Búsqueda (debe ir ANTES de cualquier ruta con :id) ---
+app.get("/api/estudiantes/buscar", function(req, res) {
+    const q       = req.query.q       || "";
+    const grado   = req.query.grado   || "";
+    const seccion = req.query.seccion || "";
+    const term    = "%" + q + "%";
+    let sql      = "SELECT * FROM estudiantes WHERE activo=1";
+    const params = [];
+    if (q) {
+        sql += " AND (nombre LIKE ? OR matricula LIKE ? OR IFNULL(cedula,'') LIKE ?)";
+        params.push(term, term, term);
+    }
+    if (grado)   { sql += " AND grado=?";   params.push(grado);   }
+    if (seccion) { sql += " AND seccion=?"; params.push(seccion); }
+    sql += " ORDER BY nombre LIMIT 100";
+    db.query(sql, params, function(err, results) {
+        if (err) { console.error("GET /api/estudiantes/buscar:", err.message); return res.status(500).json({ error: "Error al buscar.", detalle: err.message }); }
         res.json(results);
     });
 });
@@ -250,9 +292,10 @@ app.post("/api/estudiantes", function(req, res) {
         [nombre, matricula, cedula||null, fecha_nacimiento||null, sexo||null, grado, seccion, aula_id||null, tutor, parentesco_tutor||null, telefono, direccion, observaciones],
         function(err, result) {
             if (err) {
+                console.error("POST /api/estudiantes:", err.message);
                 if (err.code === "ER_DUP_ENTRY")
                     return res.status(409).json({ error: "Ya existe un estudiante con esa matricula." });
-                return res.status(500).json({ error: "Error al guardar estudiante." });
+                return res.status(500).json({ error: "Error al guardar estudiante.", detalle: err.message });
             }
             res.json({ ok: true, id: result.insertId });
         });
@@ -493,29 +536,6 @@ app.get("/api/exportar/excel/:tipo", async function(req, res) {
         res.setHeader("Content-Disposition", `attachment; filename="${tipo}.xlsx"`);
         await workbook.xlsx.write(res);
         res.end();
-    });
-});
-
-// =============================================
-//  BUSQUEDA AVANZADA
-// =============================================
-app.get("/api/buscar", function(req, res) {
-    const q       = req.query.q       || "";
-    const grado   = req.query.grado   || "";
-    const seccion = req.query.seccion || "";
-    const term    = "%" + q + "%";
-    let sql      = "SELECT * FROM estudiantes WHERE activo=1";
-    const params = [];
-    if (q) {
-        sql += " AND (nombre LIKE ? OR matricula LIKE ? OR cedula LIKE ?)";
-        params.push(term, term, term);
-    }
-    if (grado)   { sql += " AND grado=?";   params.push(grado);   }
-    if (seccion) { sql += " AND seccion=?"; params.push(seccion); }
-    sql += " ORDER BY nombre LIMIT 100";
-    db.query(sql, params, function(err, results) {
-        if (err) return res.status(500).json({ error: "Error al buscar." });
-        res.json(results);
     });
 });
 
