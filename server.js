@@ -220,18 +220,18 @@ app.post("/api/login", function(req, res) {
 //  ESTUDIANTES
 // =============================================
 app.get("/api/estudiantes", function(req, res) {
-    db.query("SELECT * FROM estudiantes ORDER BY creado_en DESC", function(err, results) {
+    db.query("SELECT * FROM estudiantes WHERE activo = 1 ORDER BY creado_en DESC", function(err, results) {
         if (err) return res.status(500).json({ error: "Error al obtener estudiantes." });
         res.json(results);
     });
 });
 
 app.post("/api/estudiantes", function(req, res) {
-    const { nombre, matricula, grado, seccion, tutor, telefono, direccion, observaciones } = req.body;
+    const { nombre, matricula, grado, seccion, aula_id, tutor, telefono, direccion, observaciones } = req.body;
     if (!nombre || !matricula || !grado)
         return res.status(400).json({ error: "Nombre, matricula y grado son obligatorios." });
-    db.query("INSERT INTO estudiantes (nombre, matricula, grado, seccion, tutor, telefono, direccion, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [nombre, matricula, grado, seccion, tutor, telefono, direccion, observaciones],
+    db.query("INSERT INTO estudiantes (nombre, matricula, grado, seccion, aula_id, tutor, telefono, direccion, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [nombre, matricula, grado, seccion, aula_id || null, tutor, telefono, direccion, observaciones],
         function(err, result) {
             if (err) {
                 if (err.code === "ER_DUP_ENTRY")
@@ -240,6 +240,34 @@ app.post("/api/estudiantes", function(req, res) {
             }
             res.json({ ok: true, id: result.insertId });
         });
+});
+
+app.put("/api/estudiantes/:id", function(req, res) {
+    const { nombre, matricula, grado, seccion, aula_id, tutor, telefono, direccion, observaciones } = req.body;
+    if (!nombre || !matricula || !grado)
+        return res.status(400).json({ error: "Nombre, matricula y grado son obligatorios." });
+    db.query(
+        "UPDATE estudiantes SET nombre=?, matricula=?, grado=?, seccion=?, aula_id=?, tutor=?, telefono=?, direccion=?, observaciones=? WHERE id=? AND activo=1",
+        [nombre, matricula, grado, seccion, aula_id || null, tutor, telefono, direccion, observaciones, req.params.id],
+        function(err, result) {
+            if (err) {
+                if (err.code === "ER_DUP_ENTRY")
+                    return res.status(409).json({ error: "Ya existe un estudiante con esa matricula." });
+                return res.status(500).json({ error: "Error al actualizar estudiante." });
+            }
+            if (result.affectedRows === 0)
+                return res.status(404).json({ error: "Estudiante no encontrado." });
+            res.json({ ok: true });
+        });
+});
+
+app.delete("/api/estudiantes/:id", function(req, res) {
+    db.query("UPDATE estudiantes SET activo=0 WHERE id=?", [req.params.id], function(err, result) {
+        if (err) return res.status(500).json({ error: "Error al eliminar estudiante." });
+        if (result.affectedRows === 0)
+            return res.status(404).json({ error: "Estudiante no encontrado." });
+        res.json({ ok: true });
+    });
 });
 
 // =============================================
