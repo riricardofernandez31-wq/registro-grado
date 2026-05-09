@@ -614,6 +614,316 @@ body {
     color: #777;
 }
 
+/* ===================== BUSQUEDA AVANZADA ===================== */
+
+.busqueda-barra {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.busqueda-input-wrap {
+    position: relative;
+}
+
+.busqueda-lupa {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 18px;
+    pointer-events: none;
+    line-height: 1;
+}
+
+.busqueda-input {
+    width: 100%;
+    padding: 14px 16px 14px 46px;
+    border: 2px solid #dde3ef;
+    border-radius: 12px;
+    font-size: 15px;
+    font-family: inherit;
+    color: #1a1a2e;
+    background: #f8faff;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.busqueda-input:focus {
+    border-color: #1565c0;
+    box-shadow: 0 0 0 3px rgba(21,101,192,0.12);
+    background: #fff;
+}
+
+.filtros-fila {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.filtro-select {
+    padding: 10px 14px;
+    border: 1.5px solid #dde3ef;
+    border-radius: 10px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #1a1a2e;
+    background: #f8faff;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.filtro-select:focus {
+    border-color: #1565c0;
+}
+
+.btn-ver-ficha {
+    background: #1565c0;
+    color: #fff;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+}
+
+.btn-ver-ficha:hover {
+    background: #0d47a1;
+}
+
+/* ===================== FICHA ESTUDIANTE ===================== */
+
+.ficha-estudiante {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    overflow: hidden;
+}
+
+.ficha-header {
+    background: linear-gradient(135deg, #0d2352 0%, #1565c0 100%);
+    padding: 28px 32px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    color: #fff;
+    flex-wrap: wrap;
+}
+
+.ficha-avatar {
+    width: 68px;
+    height: 68px;
+    background: rgba(255,255,255,0.18);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+    border: 2px solid rgba(255,255,255,0.35);
+}
+
+.ficha-header-info {
+    flex: 1;
+    min-width: 180px;
+}
+
+.ficha-nombre {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: #fff;
+}
+
+.ficha-tags {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ficha-tag {
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid rgba(255,255,255,0.2);
+}
+
+.ficha-promedio-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #fff;
+    border-radius: 14px;
+    padding: 12px 20px;
+    border: 3px solid;
+    min-width: 90px;
+    flex-shrink: 0;
+}
+
+.ficha-promedio-num {
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.ficha-promedio-label {
+    font-size: 10px;
+    color: #666;
+    text-align: center;
+    margin-top: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.ficha-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+
+.ficha-grid-2 .ficha-section:first-child {
+    border-right: 1px solid #f0f4fa;
+}
+
+.ficha-section {
+    padding: 24px 28px;
+    border-bottom: 1px solid #f0f4fa;
+}
+
+.ficha-section-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #0d2352;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #f0f4fa;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+
+.ficha-campo {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 14px;
+    align-items: flex-start;
+}
+
+.ficha-campo span {
+    color: #888;
+    min-width: 120px;
+    flex-shrink: 0;
+    padding-top: 1px;
+}
+
+.ficha-campo strong {
+    color: #1a1a2e;
+    font-weight: 600;
+}
+
+.asist-stats {
+    display: flex;
+    gap: 12px;
+}
+
+.asist-stat {
+    flex: 1;
+    text-align: center;
+    padding: 14px 10px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.asist-stat strong {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.asist-stat span {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.asist-presente { background: #e8f5e9; color: #2e7d32; }
+.asist-ausente  { background: #fdecea; color: #c62828; }
+.asist-tardanza { background: #fff3e0; color: #e65100; }
+.asist-excusa   { background: #f3e5f5; color: #6a1b9a; }
+
+.participacion-form {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.part-input {
+    padding: 10px 14px;
+    border: 1.5px solid #dde3ef;
+    border-radius: 10px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #f8faff;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.part-input:focus {
+    border-color: #1565c0;
+    background: #fff;
+}
+
+.part-input-flex {
+    flex: 1;
+    min-width: 200px;
+}
+
+.participaciones-lista {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.participaciones-lista li {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 10px 14px;
+    background: #f4f7ff;
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.part-fecha {
+    color: #1565c0;
+    font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.part-desc {
+    color: #444;
+    flex: 1;
+}
+
 /* ===================== RESPONSIVE ===================== */
 
 @media (max-width: 900px) {
@@ -628,5 +938,25 @@ body {
     }
     .reports-grid {
         grid-template-columns: 1fr;
+    }
+    .ficha-grid-2 {
+        grid-template-columns: 1fr;
+    }
+    .ficha-grid-2 .ficha-section:first-child {
+        border-right: none;
+        border-bottom: 1px solid #f0f4fa;
+    }
+    .asist-stats {
+        flex-wrap: wrap;
+    }
+    .asist-stat {
+        min-width: calc(50% - 6px);
+    }
+    .ficha-header {
+        padding: 20px;
+    }
+    .filtros-fila {
+        flex-direction: column;
+        align-items: stretch;
     }
 }

@@ -51,6 +51,9 @@
             <a href="#" class="nav-item" data-section="estudiantes">
                 <span class="nav-icon">&#128100;</span> Estudiantes
             </a>
+            <a href="#" class="nav-item" data-section="busqueda">
+                <span class="nav-icon">&#128269;</span> Buscador
+            </a>
             <a href="#" class="nav-item" data-section="calificaciones">
                 <span class="nav-icon">&#128221;</span> Calificaciones
             </a>
@@ -139,7 +142,18 @@
                             <option>A</option><option>B</option><option>C</option><option>D</option>
                         </select>
                     </div>
+                    <div class="field"><label>Cedula</label><input type="text" id="est-cedula" placeholder="000-0000000-0"></div>
+                    <div class="field"><label>Fecha de Nacimiento</label><input type="date" id="est-fechanac"></div>
+                    <div class="field">
+                        <label>Sexo</label>
+                        <select id="est-sexo">
+                            <option value="">Seleccione</option>
+                            <option value="M">Masculino</option>
+                            <option value="F">Femenino</option>
+                        </select>
+                    </div>
                     <div class="field"><label>Tutor Responsable</label><input type="text" id="est-tutor" placeholder="Nombre del tutor"></div>
+                    <div class="field"><label>Parentesco del Tutor</label><input type="text" id="est-parentesco" placeholder="Ej: Madre, Padre, Abuela"></div>
                     <div class="field"><label>Telefono</label><input type="tel" id="est-telefono" placeholder="809-000-0000"></div>
                     <div class="field field-full"><label>Direccion</label><input type="text" id="est-direccion" placeholder="Calle, sector, municipio"></div>
                     <div class="field field-full"><label>Observaciones</label><textarea id="est-observaciones" placeholder="Observaciones adicionales..."></textarea></div>
@@ -157,6 +171,34 @@
                     <tbody id="tablaEstudiantes"><tr><td colspan="6" class="empty-row">No hay estudiantes registrados.</td></tr></tbody>
                 </table>
             </div>
+        </section>
+
+        <!-- BUSQUEDA -->
+        <section id="sec-busqueda" class="section">
+            <div class="panel">
+                <h3 class="panel-title">Buscador Avanzado de Estudiantes</h3>
+                <div class="busqueda-barra">
+                    <div class="busqueda-input-wrap">
+                        <span class="busqueda-lupa">&#128269;</span>
+                        <input type="text" id="busqueda-input" class="busqueda-input"
+                               placeholder="Buscar por nombre, cedula o matricula...">
+                    </div>
+                    <div class="filtros-fila">
+                        <select id="filtro-grado" class="filtro-select">
+                            <option value="">Todos los grados</option>
+                            <option>1ro</option><option>2do</option><option>3ro</option>
+                            <option>4to</option><option>5to</option><option>6to</option>
+                        </select>
+                        <select id="filtro-seccion" class="filtro-select">
+                            <option value="">Todas las secciones</option>
+                            <option>A</option><option>B</option><option>C</option><option>D</option>
+                        </select>
+                        <button onclick="limpiarBusqueda()" class="btn-secondary" style="padding:10px 20px;font-size:14px;width:auto">Limpiar</button>
+                    </div>
+                </div>
+                <div id="busqueda-resultados"></div>
+            </div>
+            <div id="ficha-contenedor" style="margin-top:24px"></div>
         </section>
 
         <!-- CALIFICACIONES -->

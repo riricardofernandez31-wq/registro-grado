@@ -155,10 +155,25 @@ function initDB() {
                 ON DELETE SET NULL ON UPDATE CASCADE,
             CONSTRAINT fk_asist_usuario     FOREIGN KEY (registrado_por) REFERENCES usuarios (id)
                 ON DELETE SET NULL ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+        `CREATE TABLE IF NOT EXISTS participaciones (
+            id            INT          NOT NULL AUTO_INCREMENT,
+            estudiante_id INT          NOT NULL,
+            fecha         DATE         NOT NULL,
+            descripcion   TEXT                  DEFAULT NULL,
+            creado_en     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            CONSTRAINT fk_part_estudiante FOREIGN KEY (estudiante_id) REFERENCES estudiantes (id)
+                ON DELETE CASCADE ON UPDATE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
     ];
 
     const datos = [
+        `ALTER TABLE estudiantes ADD COLUMN IF NOT EXISTS cedula VARCHAR(20) DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN IF NOT EXISTS fecha_nacimiento DATE DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN IF NOT EXISTS sexo ENUM('M','F') DEFAULT NULL`,
+        `ALTER TABLE estudiantes ADD COLUMN IF NOT EXISTS parentesco_tutor VARCHAR(50) DEFAULT NULL`,
         `INSERT IGNORE INTO configuracion (id, nombre_centro, anio_escolar, director, distrito, regional)
          VALUES (1, 'Centro Educativo', '2025-2026', '', '', '')`,
         `INSERT IGNORE INTO usuarios (nombre, usuario, password, rol)
@@ -227,11 +242,12 @@ app.get("/api/estudiantes", function(req, res) {
 });
 
 app.post("/api/estudiantes", function(req, res) {
-    const { nombre, matricula, grado, seccion, aula_id, tutor, telefono, direccion, observaciones } = req.body;
+    const { nombre, matricula, cedula, fecha_nacimiento, sexo, grado, seccion, aula_id, tutor, parentesco_tutor, telefono, direccion, observaciones } = req.body;
     if (!nombre || !matricula || !grado)
         return res.status(400).json({ error: "Nombre, matricula y grado son obligatorios." });
-    db.query("INSERT INTO estudiantes (nombre, matricula, grado, seccion, aula_id, tutor, telefono, direccion, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [nombre, matricula, grado, seccion, aula_id || null, tutor, telefono, direccion, observaciones],
+    db.query(
+        "INSERT INTO estudiantes (nombre, matricula, cedula, fecha_nacimiento, sexo, grado, seccion, aula_id, tutor, parentesco_tutor, telefono, direccion, observaciones) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        [nombre, matricula, cedula||null, fecha_nacimiento||null, sexo||null, grado, seccion, aula_id||null, tutor, parentesco_tutor||null, telefono, direccion, observaciones],
         function(err, result) {
             if (err) {
                 if (err.code === "ER_DUP_ENTRY")
@@ -243,12 +259,12 @@ app.post("/api/estudiantes", function(req, res) {
 });
 
 app.put("/api/estudiantes/:id", function(req, res) {
-    const { nombre, matricula, grado, seccion, aula_id, tutor, telefono, direccion, observaciones } = req.body;
+    const { nombre, matricula, cedula, fecha_nacimiento, sexo, grado, seccion, aula_id, tutor, parentesco_tutor, telefono, direccion, observaciones } = req.body;
     if (!nombre || !matricula || !grado)
         return res.status(400).json({ error: "Nombre, matricula y grado son obligatorios." });
     db.query(
-        "UPDATE estudiantes SET nombre=?, matricula=?, grado=?, seccion=?, aula_id=?, tutor=?, telefono=?, direccion=?, observaciones=? WHERE id=? AND activo=1",
-        [nombre, matricula, grado, seccion, aula_id || null, tutor, telefono, direccion, observaciones, req.params.id],
+        "UPDATE estudiantes SET nombre=?,matricula=?,cedula=?,fecha_nacimiento=?,sexo=?,grado=?,seccion=?,aula_id=?,tutor=?,parentesco_tutor=?,telefono=?,direccion=?,observaciones=? WHERE id=? AND activo=1",
+        [nombre, matricula, cedula||null, fecha_nacimiento||null, sexo||null, grado, seccion, aula_id||null, tutor, parentesco_tutor||null, telefono, direccion, observaciones, req.params.id],
         function(err, result) {
             if (err) {
                 if (err.code === "ER_DUP_ENTRY")
@@ -478,6 +494,81 @@ app.get("/api/exportar/excel/:tipo", async function(req, res) {
         await workbook.xlsx.write(res);
         res.end();
     });
+});
+
+// =============================================
+//  BUSQUEDA AVANZADA
+// =============================================
+app.get("/api/buscar", function(req, res) {
+    const q       = req.query.q       || "";
+    const grado   = req.query.grado   || "";
+    const seccion = req.query.seccion || "";
+    const term    = "%" + q + "%";
+    let sql      = "SELECT * FROM estudiantes WHERE activo=1";
+    const params = [];
+    if (q) {
+        sql += " AND (nombre LIKE ? OR matricula LIKE ? OR cedula LIKE ?)";
+        params.push(term, term, term);
+    }
+    if (grado)   { sql += " AND grado=?";   params.push(grado);   }
+    if (seccion) { sql += " AND seccion=?"; params.push(seccion); }
+    sql += " ORDER BY nombre LIMIT 100";
+    db.query(sql, params, function(err, results) {
+        if (err) return res.status(500).json({ error: "Error al buscar." });
+        res.json(results);
+    });
+});
+
+app.get("/api/estudiantes/:id/ficha", function(req, res) {
+    const id = req.params.id;
+    db.query(
+        `SELECT e.*, a.anio_escolar FROM estudiantes e
+         LEFT JOIN aulas a ON e.aula_id = a.id
+         WHERE e.id = ? AND e.activo = 1`,
+        [id], function(err, estRows) {
+            if (err || estRows.length === 0)
+                return res.status(404).json({ error: "Estudiante no encontrado." });
+            const est = estRows[0];
+            db.query(
+                "SELECT * FROM calificaciones WHERE estudiante_id=? ORDER BY asignatura",
+                [id], function(err2, califs) {
+                    if (err2) return res.status(500).json({ error: "Error al obtener calificaciones." });
+                    db.query(
+                        "SELECT DATE_FORMAT(fecha,'%Y-%m-%d') AS fecha, estado, observacion FROM asistencia WHERE estudiante_id=? ORDER BY fecha DESC LIMIT 60",
+                        [id], function(err3, asist) {
+                            if (err3) return res.status(500).json({ error: "Error al obtener asistencia." });
+                            db.query(
+                                "SELECT DATE_FORMAT(fecha,'%Y-%m-%d') AS fecha, descripcion FROM participaciones WHERE estudiante_id=? ORDER BY fecha DESC",
+                                [id], function(err4, parts) {
+                                    if (err4) return res.status(500).json({ error: "Error al obtener participaciones." });
+                                    const stats = { presente:0, ausente:0, tardanza:0, excusa:0 };
+                                    asist.forEach(function(a) { if (stats[a.estado] !== undefined) stats[a.estado]++; });
+                                    const finales = califs.filter(function(c) { return c.final !== null; }).map(function(c) { return parseFloat(c.final); });
+                                    const promedio = finales.length ? (finales.reduce(function(a,b){return a+b;},0)/finales.length).toFixed(1) : null;
+                                    res.json({
+                                        estudiante:      est,
+                                        calificaciones:  califs,
+                                        asistencia:      { stats: stats, detalle: asist.slice(0, 10) },
+                                        participaciones: parts,
+                                        promedio_general: promedio
+                                    });
+                                });
+                        });
+                });
+        });
+});
+
+app.post("/api/participaciones", function(req, res) {
+    const { estudiante_id, fecha, descripcion } = req.body;
+    if (!estudiante_id || !fecha)
+        return res.status(400).json({ error: "Estudiante y fecha son obligatorios." });
+    db.query(
+        "INSERT INTO participaciones (estudiante_id, fecha, descripcion) VALUES (?,?,?)",
+        [estudiante_id, fecha, descripcion || ""],
+        function(err, result) {
+            if (err) return res.status(500).json({ error: "Error al guardar participacion." });
+            res.json({ ok: true, id: result.insertId });
+        });
 });
 
 // =============================================

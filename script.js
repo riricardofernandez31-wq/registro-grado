@@ -125,6 +125,7 @@ function mostrarSeccion(nombre) {
 
     const titulos = {
         inicio:"Panel Principal", estudiantes:"Registro de Estudiantes",
+        busqueda:"Buscador Avanzado",
         calificaciones:"Registro de Calificaciones", asistencia:"Control de Asistencia",
         reportes:"Reportes Academicos", usuarios:"Gestion de Usuarios",
         configuracion:"Configuracion Institucional"
@@ -133,6 +134,7 @@ function mostrarSeccion(nombre) {
 
     if (nombre === "inicio")         cargarDashboard();
     if (nombre === "estudiantes")    cargarTablaEstudiantes();
+    if (nombre === "busqueda")       iniciarBusqueda();
     if (nombre === "calificaciones") cargarSelectEstudiantes();
     if (nombre === "asistencia")     cargarAsistencia();
     if (nombre === "usuarios")       cargarTablaUsuarios();
@@ -166,14 +168,18 @@ async function cargarDashboard() {
 document.getElementById("formEstudiante").addEventListener("submit", async function(e) {
     e.preventDefault();
     const datos = {
-        nombre:        document.getElementById("est-nombre").value.trim(),
-        matricula:     document.getElementById("est-matricula").value.trim(),
-        grado:         document.getElementById("est-grado").value,
-        seccion:       document.getElementById("est-seccion").value || null,
-        tutor:         document.getElementById("est-tutor").value.trim(),
-        telefono:      document.getElementById("est-telefono").value.trim(),
-        direccion:     document.getElementById("est-direccion").value.trim(),
-        observaciones: document.getElementById("est-observaciones").value.trim()
+        nombre:           document.getElementById("est-nombre").value.trim(),
+        matricula:        document.getElementById("est-matricula").value.trim(),
+        cedula:           document.getElementById("est-cedula").value.trim() || null,
+        fecha_nacimiento: document.getElementById("est-fechanac").value || null,
+        sexo:             document.getElementById("est-sexo").value || null,
+        grado:            document.getElementById("est-grado").value,
+        seccion:          document.getElementById("est-seccion").value || null,
+        tutor:            document.getElementById("est-tutor").value.trim(),
+        parentesco_tutor: document.getElementById("est-parentesco").value.trim() || null,
+        telefono:         document.getElementById("est-telefono").value.trim(),
+        direccion:        document.getElementById("est-direccion").value.trim(),
+        observaciones:    document.getElementById("est-observaciones").value.trim()
     };
     try {
         const url    = editandoEstudianteId ? `${API}/estudiantes/${editandoEstudianteId}` : `${API}/estudiantes`;
@@ -195,14 +201,18 @@ function editarEstudiante(id) {
     const est = estudiantesCache.find(e => e.id === id);
     if (!est) return;
     editandoEstudianteId = id;
-    document.getElementById("est-nombre").value        = est.nombre        || "";
-    document.getElementById("est-matricula").value     = est.matricula     || "";
-    document.getElementById("est-grado").value         = est.grado         || "";
-    document.getElementById("est-seccion").value       = est.seccion       || "";
-    document.getElementById("est-tutor").value         = est.tutor         || "";
-    document.getElementById("est-telefono").value      = est.telefono      || "";
-    document.getElementById("est-direccion").value     = est.direccion     || "";
-    document.getElementById("est-observaciones").value = est.observaciones || "";
+    document.getElementById("est-nombre").value        = est.nombre           || "";
+    document.getElementById("est-matricula").value     = est.matricula        || "";
+    document.getElementById("est-cedula").value        = est.cedula           || "";
+    document.getElementById("est-fechanac").value      = est.fecha_nacimiento ? est.fecha_nacimiento.split("T")[0] : "";
+    document.getElementById("est-sexo").value          = est.sexo             || "";
+    document.getElementById("est-grado").value         = est.grado            || "";
+    document.getElementById("est-seccion").value       = est.seccion          || "";
+    document.getElementById("est-tutor").value         = est.tutor            || "";
+    document.getElementById("est-parentesco").value    = est.parentesco_tutor || "";
+    document.getElementById("est-telefono").value      = est.telefono         || "";
+    document.getElementById("est-direccion").value     = est.direccion        || "";
+    document.getElementById("est-observaciones").value = est.observaciones    || "";
     document.getElementById("btnSubmitEstudiante").textContent  = "Actualizar Estudiante";
     document.getElementById("btnCancelarEdicion").style.display = "inline-block";
     document.querySelector("#sec-estudiantes .panel-title").textContent = "Editar Estudiante";
@@ -538,3 +548,229 @@ document.getElementById("formConfiguracion").addEventListener("submit", async fu
         cargarNombreCentro();
     } catch (err) { alert("No se pudo conectar al servidor."); }
 });
+
+// =============================================
+//  BUSQUEDA AVANZADA
+// =============================================
+let busquedaTimeout     = null;
+let fichaActualId       = null;
+let busquedaInicializada = false;
+
+function iniciarBusqueda() {
+    if (busquedaInicializada) { buscarEstudiantes(); return; }
+    busquedaInicializada = true;
+    document.getElementById("busqueda-input").addEventListener("input", function() {
+        clearTimeout(busquedaTimeout);
+        busquedaTimeout = setTimeout(buscarEstudiantes, 350);
+    });
+    document.getElementById("filtro-grado").addEventListener("change", buscarEstudiantes);
+    document.getElementById("filtro-seccion").addEventListener("change", buscarEstudiantes);
+    buscarEstudiantes();
+}
+
+async function buscarEstudiantes() {
+    const q       = document.getElementById("busqueda-input").value.trim();
+    const grado   = document.getElementById("filtro-grado").value;
+    const seccion = document.getElementById("filtro-seccion").value;
+    const params  = new URLSearchParams();
+    if (q)       params.set("q", q);
+    if (grado)   params.set("grado", grado);
+    if (seccion) params.set("seccion", seccion);
+
+    const contenedor = document.getElementById("busqueda-resultados");
+    contenedor.innerHTML = '<p style="color:#888;padding:12px 0">Buscando...</p>';
+    try {
+        const res  = await fetch(`${API}/buscar?${params.toString()}`);
+        const data = await res.json();
+        if (data.length === 0) {
+            contenedor.innerHTML = '<p class="empty-row">No se encontraron estudiantes.</p>';
+            return;
+        }
+        contenedor.innerHTML = `
+            <p style="color:#888;font-size:13px;margin-bottom:12px">${data.length} estudiante(s) encontrado(s)</p>
+            <div style="overflow-x:auto">
+            <table class="data-table">
+                <thead><tr>
+                    <th>#</th><th>Nombre</th><th>Matricula</th><th>Cedula</th>
+                    <th>Grado</th><th>Seccion</th><th>Accion</th>
+                </tr></thead>
+                <tbody>
+                    ${data.map(function(e, i) { return `<tr>
+                        <td>${i + 1}</td>
+                        <td><strong>${e.nombre}</strong></td>
+                        <td>${e.matricula}</td>
+                        <td>${e.cedula || "—"}</td>
+                        <td>${e.grado}</td>
+                        <td>${e.seccion || "—"}</td>
+                        <td><button onclick="mostrarFichaEstudiante(${e.id})" class="btn-ver-ficha">Ver Ficha</button></td>
+                    </tr>`; }).join("")}
+                </tbody>
+            </table>
+            </div>`;
+    } catch (err) {
+        contenedor.innerHTML = '<p class="empty-row">Error al buscar estudiantes.</p>';
+    }
+}
+
+function limpiarBusqueda() {
+    document.getElementById("busqueda-input").value  = "";
+    document.getElementById("filtro-grado").value    = "";
+    document.getElementById("filtro-seccion").value  = "";
+    document.getElementById("ficha-contenedor").innerHTML = "";
+    buscarEstudiantes();
+}
+
+async function mostrarFichaEstudiante(id) {
+    fichaActualId = id;
+    const contenedor = document.getElementById("ficha-contenedor");
+    contenedor.innerHTML = '<div class="panel" style="padding:24px"><p style="color:#888">Cargando ficha...</p></div>';
+    contenedor.scrollIntoView({ behavior:"smooth", block:"start" });
+    try {
+        const res  = await fetch(`${API}/estudiantes/${id}/ficha`);
+        const data = await res.json();
+        if (!res.ok) { contenedor.innerHTML = ""; return; }
+
+        const e       = data.estudiante;
+        const califs  = data.calificaciones;
+        const asist   = data.asistencia;
+        const parts   = data.participaciones;
+        const promedio = data.promedio_general;
+
+        let edad = "";
+        if (e.fecha_nacimiento) {
+            const anos = Math.floor((Date.now() - new Date(e.fecha_nacimiento)) / (365.25 * 86400000));
+            edad = " (" + anos + " años)";
+        }
+
+        const pNum  = parseFloat(promedio);
+        const pColor = pNum >= 90 ? "#2e7d32" : pNum >= 70 ? "#1565c0" : pNum >= 60 ? "#e65100" : "#c62828";
+
+        const califsHTML = califs.length === 0
+            ? '<p class="empty-row">Sin calificaciones registradas.</p>'
+            : '<div style="overflow-x:auto"><table class="data-table">'
+              + '<thead><tr><th>Asignatura</th><th>Parcial 1</th><th>Parcial 2</th><th>Final</th><th>Estado</th></tr></thead><tbody>'
+              + califs.map(function(c) {
+                    const fin    = parseFloat(c.final);
+                    const estado = isNaN(fin) ? "—" : fin >= 70
+                        ? '<span style="color:#2e7d32;font-weight:700">Aprobado</span>'
+                        : '<span style="color:#c62828;font-weight:700">Pendiente</span>';
+                    return '<tr><td><strong>' + c.asignatura + '</strong></td><td>' + (c.parcial_1 != null ? c.parcial_1 : "—")
+                        + '</td><td>' + (c.parcial_2 != null ? c.parcial_2 : "—")
+                        + '</td><td><strong>' + (c.final != null ? c.final : "—") + '</strong></td><td>' + estado + '</td></tr>';
+                }).join("")
+              + '</tbody></table></div>';
+
+        const estadosColor = { presente:"#2e7d32", ausente:"#c62828", tardanza:"#e65100", excusa:"#6a1b9a" };
+        const asistDetalle = asist.detalle.length === 0
+            ? '<p class="empty-row">Sin registros de asistencia.</p>'
+            : '<div style="overflow-x:auto"><table class="data-table">'
+              + '<thead><tr><th>Fecha</th><th>Estado</th><th>Observacion</th></tr></thead><tbody>'
+              + asist.detalle.map(function(a) {
+                    const color = estadosColor[a.estado] || "#333";
+                    const fecha = new Date(a.fecha + "T00:00:00").toLocaleDateString("es-DO", { year:"numeric", month:"short", day:"numeric" });
+                    return '<tr><td>' + fecha + '</td><td><span style="color:' + color + ';font-weight:700;text-transform:capitalize">'
+                        + a.estado + '</span></td><td>' + (a.observacion || "—") + '</td></tr>';
+                }).join("")
+              + '</tbody></table></div>';
+
+        const partsHTML = parts.length === 0
+            ? '<p style="color:#aaa;font-size:13px;margin-top:8px">Sin participaciones registradas.</p>'
+            : '<ul class="participaciones-lista">'
+              + parts.map(function(p) {
+                    const fecha = new Date(p.fecha + "T00:00:00").toLocaleDateString("es-DO", { year:"numeric", month:"short", day:"numeric" });
+                    return '<li><span class="part-fecha">' + fecha + '</span><span class="part-desc">' + (p.descripcion || "Participacion registrada") + '</span></li>';
+                }).join("")
+              + '</ul>';
+
+        const hoyStr = new Date().toISOString().split("T")[0];
+        const fnac   = e.fecha_nacimiento
+            ? new Date(e.fecha_nacimiento + "T00:00:00").toLocaleDateString("es-DO", { year:"numeric", month:"long", day:"numeric" }) + edad
+            : "—";
+        const totalAsist = asist.stats.presente + asist.stats.ausente + asist.stats.tardanza + asist.stats.excusa;
+        const anioEscolar = e.anio_escolar || "";
+
+        contenedor.innerHTML = `
+            <div class="ficha-estudiante">
+                <div class="ficha-header">
+                    <div class="ficha-avatar">${e.nombre.charAt(0).toUpperCase()}</div>
+                    <div class="ficha-header-info">
+                        <h2 class="ficha-nombre">${e.nombre}</h2>
+                        <div class="ficha-tags">
+                            <span class="ficha-tag">Mat: ${e.matricula}</span>
+                            <span class="ficha-tag">${e.grado}${e.seccion ? ' "' + e.seccion + '"' : ""}</span>
+                            ${anioEscolar ? '<span class="ficha-tag">' + anioEscolar + '</span>' : ""}
+                        </div>
+                    </div>
+                    ${promedio !== null ? `<div class="ficha-promedio-badge" style="border-color:${pColor};color:${pColor}">
+                        <span class="ficha-promedio-num">${promedio}</span>
+                        <span class="ficha-promedio-label">Promedio General</span>
+                    </div>` : ""}
+                </div>
+
+                <div class="ficha-grid-2">
+                    <div class="ficha-section">
+                        <h4 class="ficha-section-title">Datos Personales</h4>
+                        <div class="ficha-campo"><span>Cedula:</span><strong>${e.cedula || "—"}</strong></div>
+                        <div class="ficha-campo"><span>Nacimiento:</span><strong>${fnac}</strong></div>
+                        <div class="ficha-campo"><span>Sexo:</span><strong>${e.sexo === "M" ? "Masculino" : e.sexo === "F" ? "Femenino" : "—"}</strong></div>
+                        <div class="ficha-campo"><span>Direccion:</span><strong>${e.direccion || "—"}</strong></div>
+                        ${e.observaciones ? '<div class="ficha-campo"><span>Observaciones:</span><strong>' + e.observaciones + '</strong></div>' : ""}
+                    </div>
+                    <div class="ficha-section">
+                        <h4 class="ficha-section-title">Tutor Responsable</h4>
+                        <div class="ficha-campo"><span>Nombre:</span><strong>${e.tutor || "—"}</strong></div>
+                        <div class="ficha-campo"><span>Telefono:</span><strong>${e.telefono || "—"}</strong></div>
+                        <div class="ficha-campo"><span>Parentesco:</span><strong>${e.parentesco_tutor || "—"}</strong></div>
+                    </div>
+                </div>
+
+                <div class="ficha-section">
+                    <h4 class="ficha-section-title">Asistencia (${totalAsist} dias registrados)</h4>
+                    <div class="asist-stats">
+                        <div class="asist-stat asist-presente"><strong>${asist.stats.presente}</strong><span>Presente</span></div>
+                        <div class="asist-stat asist-ausente"><strong>${asist.stats.ausente}</strong><span>Ausente</span></div>
+                        <div class="asist-stat asist-tardanza"><strong>${asist.stats.tardanza}</strong><span>Tardanza</span></div>
+                        <div class="asist-stat asist-excusa"><strong>${asist.stats.excusa}</strong><span>Excusa</span></div>
+                    </div>
+                    <div style="margin-top:16px">
+                        <p style="font-size:13px;color:#888;margin-bottom:10px">Ultimos 10 registros:</p>
+                        ${asistDetalle}
+                    </div>
+                </div>
+
+                <div class="ficha-section">
+                    <h4 class="ficha-section-title">Calificaciones por Asignatura</h4>
+                    ${califsHTML}
+                </div>
+
+                <div class="ficha-section">
+                    <h4 class="ficha-section-title">Participaciones Diarias</h4>
+                    <div class="participacion-form">
+                        <input type="date" id="part-fecha" value="${hoyStr}" class="part-input">
+                        <input type="text" id="part-desc" placeholder="Descripcion de la participacion..." class="part-input part-input-flex">
+                        <button onclick="agregarParticipacion(${e.id})" class="btn-primary" style="padding:10px 18px;font-size:13px;white-space:nowrap;width:auto">+ Agregar</button>
+                    </div>
+                    <div id="participaciones-lista-${e.id}">${partsHTML}</div>
+                </div>
+            </div>`;
+
+    } catch (err) {
+        contenedor.innerHTML = '<div class="panel"><p class="empty-row">Error al cargar ficha del estudiante.</p></div>';
+        console.error("Error ficha:", err);
+    }
+}
+
+async function agregarParticipacion(estudianteId) {
+    const fecha      = document.getElementById("part-fecha").value;
+    const descripcion = document.getElementById("part-desc").value.trim();
+    if (!fecha) { alert("Seleccione una fecha."); return; }
+    try {
+        const res = await fetch(`${API}/participaciones`, {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ estudiante_id: estudianteId, fecha, descripcion })
+        });
+        if (!res.ok) { alert("Error al guardar participacion."); return; }
+        document.getElementById("part-desc").value = "";
+        mostrarFichaEstudiante(estudianteId);
+    } catch (err) { alert("No se pudo conectar al servidor."); }
+}
