@@ -8,6 +8,14 @@ let usuarioActual    = null;
 let estudiantesCache = [];
 let editandoEstudianteId = null;
 
+function parseFechaMySQL(fecha) {
+    if (!fecha) return null;
+    const s = String(fecha).substring(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d);
+}
+
 // =============================================
 //  LOGIN
 // =============================================
@@ -105,6 +113,15 @@ document.getElementById("btnLogout").addEventListener("click", function() {
     document.getElementById("loginError").style.display     = "none";
 });
 
+document.getElementById("btnHamburger").addEventListener("click", function() {
+    document.querySelector(".sidebar").classList.toggle("open");
+    document.getElementById("sidebarOverlay").classList.toggle("active");
+});
+document.getElementById("sidebarOverlay").addEventListener("click", function() {
+    document.querySelector(".sidebar").classList.remove("open");
+    this.classList.remove("active");
+});
+
 // =============================================
 //  NAVEGACION
 // =============================================
@@ -115,6 +132,10 @@ document.querySelectorAll(".nav-item").forEach(function(item) {
         mostrarSeccion(seccion);
         document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
         this.classList.add("active");
+        if (window.innerWidth <= 768) {
+            document.querySelector(".sidebar").classList.remove("open");
+            document.getElementById("sidebarOverlay").classList.remove("active");
+        }
     });
 });
 
@@ -650,9 +671,10 @@ async function mostrarFichaEstudiante(id) {
         const parts   = data.participaciones;
         const promedio = data.promedio_general;
 
+        const fechaNac = parseFechaMySQL(e.fecha_nacimiento);
         let edad = "";
-        if (e.fecha_nacimiento) {
-            const anos = Math.floor((Date.now() - new Date(e.fecha_nacimiento)) / (365.25 * 86400000));
+        if (fechaNac) {
+            const anos = Math.floor((Date.now() - fechaNac.getTime()) / (365.25 * 86400000));
             edad = " (" + anos + " años)";
         }
 
@@ -697,8 +719,8 @@ async function mostrarFichaEstudiante(id) {
               + '</ul>';
 
         const hoyStr = new Date().toISOString().split("T")[0];
-        const fnac   = e.fecha_nacimiento
-            ? new Date(e.fecha_nacimiento + "T00:00:00").toLocaleDateString("es-DO", { year:"numeric", month:"long", day:"numeric" }) + edad
+        const fnac = fechaNac
+            ? fechaNac.toLocaleDateString("es-DO", { year:"numeric", month:"long", day:"numeric" }) + edad
             : "—";
         const totalAsist = asist.stats.presente + asist.stats.ausente + asist.stats.tardanza + asist.stats.excusa;
         const anioEscolar = e.anio_escolar || "";

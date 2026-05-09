@@ -39,6 +39,7 @@
 <!-- ===================== DASHBOARD ===================== -->
 <div class="app-layout" id="dashboard" style="display:none;">
 
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
     <aside class="sidebar">
         <div class="sidebar-header">
             <span class="sidebar-icon">&#127983;</span>
@@ -75,9 +76,12 @@
 
     <main class="main-content">
         <header class="topbar">
-            <div>
-                <h2 id="sectionTitle">Panel Principal</h2>
-                <p id="welcomeMsg">Bienvenido al Sistema de Gestion Escolar</p>
+            <div style="display:flex;align-items:center;gap:12px">
+                <button id="btnHamburger" class="btn-hamburger">&#9776;</button>
+                <div>
+                    <h2 id="sectionTitle">Panel Principal</h2>
+                    <p id="welcomeMsg">Bienvenido al Sistema de Gestion Escolar</p>
+                </div>
             </div>
             <div class="topbar-user">
                 <span class="user-badge" id="userRolBadge">Director</span>
@@ -111,12 +115,12 @@
             </div>
             <div class="panel">
                 <h3 class="panel-title">Estudiantes registrados recientemente</h3>
-                <table class="data-table">
+                <div class="table-wrap"><table class="data-table">
                     <thead><tr><th>Nombre</th><th>Matricula</th><th>Grado</th><th>Seccion</th></tr></thead>
                     <tbody id="tablaRecientes">
                         <tr><td colspan="4" class="empty-row">No hay estudiantes registrados aun.</td></tr>
                     </tbody>
-                </table>
+                </table></div>
             </div>
         </section>
 
@@ -166,10 +170,10 @@
             </div>
             <div class="panel" style="margin-top:24px">
                 <h3 class="panel-title">Lista de Estudiantes</h3>
-                <table class="data-table">
+                <div class="table-wrap"><table class="data-table">
                     <thead><tr><th>Nombre</th><th>Matricula</th><th>Grado</th><th>Seccion</th><th>Tutor</th><th>Acciones</th></tr></thead>
                     <tbody id="tablaEstudiantes"><tr><td colspan="6" class="empty-row">No hay estudiantes registrados.</td></tr></tbody>
-                </table>
+                </table></div>
             </div>
         </section>
 
@@ -231,10 +235,10 @@
             </div>
             <div class="panel" style="margin-top:24px">
                 <h3 class="panel-title">Registro de Calificaciones</h3>
-                <table class="data-table">
+                <div class="table-wrap"><table class="data-table">
                     <thead><tr><th>Estudiante</th><th>Asignatura</th><th>Parcial 1</th><th>Parcial 2</th><th>Final</th></tr></thead>
                     <tbody id="tablaCalificaciones"><tr><td colspan="5" class="empty-row">No hay calificaciones registradas.</td></tr></tbody>
-                </table>
+                </table></div>
             </div>
         </section>
 
@@ -302,10 +306,10 @@
             </div>
             <div class="panel" style="margin-top:24px">
                 <h3 class="panel-title">Usuarios del Sistema</h3>
-                <table class="data-table">
+                <div class="table-wrap"><table class="data-table">
                     <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Accion</th></tr></thead>
                     <tbody id="tablaUsuarios"><tr><td colspan="4" class="empty-row">Cargando...</td></tr></tbody>
-                </table>
+                </table></div>
             </div>
         </section>
 
