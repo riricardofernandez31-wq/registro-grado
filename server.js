@@ -379,7 +379,7 @@ app.get("/api/exportar/pdf/:tipo", function(req, res) {
     let sql = "", titulo = "", columnas = [];
 
     if (tipo === "estudiantes") {
-        sql = "SELECT nombre, matricula, grado, seccion, tutor, telefono FROM estudiantes ORDER BY nombre";
+        sql = "SELECT nombre, matricula, grado, seccion, tutor, telefono FROM estudiantes WHERE activo=1 ORDER BY nombre";
         titulo = "Listado de Estudiantes";
         columnas = ["Nombre", "Matricula", "Grado", "Seccion", "Tutor", "Telefono"];
     } else if (tipo === "calificaciones") {
@@ -436,7 +436,7 @@ app.get("/api/exportar/excel/:tipo", async function(req, res) {
     let sql = "", titulo = "", columnas = [];
 
     if (tipo === "estudiantes") {
-        sql = "SELECT nombre, matricula, grado, seccion, tutor, telefono, direccion FROM estudiantes ORDER BY nombre";
+        sql = "SELECT nombre, matricula, grado, seccion, tutor, telefono, direccion FROM estudiantes WHERE activo=1 ORDER BY nombre";
         titulo = "Estudiantes";
         columnas = ["Nombre", "Matricula", "Grado", "Seccion", "Tutor", "Telefono", "Direccion"];
     } else if (tipo === "calificaciones") {

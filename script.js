@@ -6,6 +6,7 @@
 const API = "https://registro-grado-production.up.railway.app/api";
 let usuarioActual    = null;
 let estudiantesCache = [];
+let editandoEstudianteId = null;
 
 // =============================================
 //  LOGIN
@@ -168,25 +169,62 @@ document.getElementById("formEstudiante").addEventListener("submit", async funct
         nombre:        document.getElementById("est-nombre").value.trim(),
         matricula:     document.getElementById("est-matricula").value.trim(),
         grado:         document.getElementById("est-grado").value,
-        seccion:       document.getElementById("est-seccion").value,
+        seccion:       document.getElementById("est-seccion").value || null,
         tutor:         document.getElementById("est-tutor").value.trim(),
         telefono:      document.getElementById("est-telefono").value.trim(),
         direccion:     document.getElementById("est-direccion").value.trim(),
         observaciones: document.getElementById("est-observaciones").value.trim()
     };
     try {
-        const res  = await fetch(`${API}/estudiantes`, {
-            method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(datos)
-        });
-        const data = await res.json();
+        const url    = editandoEstudianteId ? `${API}/estudiantes/${editandoEstudianteId}` : `${API}/estudiantes`;
+        const method = editandoEstudianteId ? "PUT" : "POST";
+        const res    = await fetch(url, { method, headers:{"Content-Type":"application/json"}, body:JSON.stringify(datos) });
+        const data   = await res.json();
         if (!res.ok) { alert(data.error || "Error al guardar."); return; }
+        cancelarEdicionEstudiante();
         this.reset();
         const msg = document.getElementById("msgEstudiante");
+        msg.textContent   = editandoEstudianteId ? "Estudiante actualizado exitosamente." : "Estudiante guardado exitosamente.";
         msg.style.display = "block";
         setTimeout(() => msg.style.display = "none", 3000);
         cargarTablaEstudiantes();
     } catch (err) { alert("No se pudo conectar al servidor."); }
 });
+
+function editarEstudiante(id) {
+    const est = estudiantesCache.find(e => e.id === id);
+    if (!est) return;
+    editandoEstudianteId = id;
+    document.getElementById("est-nombre").value        = est.nombre        || "";
+    document.getElementById("est-matricula").value     = est.matricula     || "";
+    document.getElementById("est-grado").value         = est.grado         || "";
+    document.getElementById("est-seccion").value       = est.seccion       || "";
+    document.getElementById("est-tutor").value         = est.tutor         || "";
+    document.getElementById("est-telefono").value      = est.telefono      || "";
+    document.getElementById("est-direccion").value     = est.direccion     || "";
+    document.getElementById("est-observaciones").value = est.observaciones || "";
+    document.getElementById("btnSubmitEstudiante").textContent  = "Actualizar Estudiante";
+    document.getElementById("btnCancelarEdicion").style.display = "inline-block";
+    document.querySelector("#sec-estudiantes .panel-title").textContent = "Editar Estudiante";
+    document.getElementById("est-nombre").scrollIntoView({ behavior:"smooth", block:"center" });
+}
+
+function cancelarEdicionEstudiante() {
+    editandoEstudianteId = null;
+    document.getElementById("formEstudiante").reset();
+    document.getElementById("btnSubmitEstudiante").textContent  = "Guardar Estudiante";
+    document.getElementById("btnCancelarEdicion").style.display = "none";
+    document.querySelector("#sec-estudiantes .panel-title").textContent = "Registrar Nuevo Estudiante";
+}
+
+async function eliminarEstudiante(id, nombre) {
+    if (!confirm(`Eliminar al estudiante "${nombre}"? Esta accion no se puede deshacer.`)) return;
+    try {
+        const res = await fetch(`${API}/estudiantes/${id}`, { method:"DELETE" });
+        if (!res.ok) { alert("Error al eliminar."); return; }
+        cargarTablaEstudiantes();
+    } catch (err) { alert("No se pudo conectar al servidor."); }
+}
 
 async function cargarTablaEstudiantes() {
     try {
@@ -195,12 +233,25 @@ async function cargarTablaEstudiantes() {
         estudiantesCache = data;
         const tbody = document.getElementById("tablaEstudiantes");
         if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="empty-row">No hay estudiantes registrados.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No hay estudiantes registrados.</td></tr>';
             return;
         }
-        tbody.innerHTML = data.map(e =>
-            `<tr><td>${e.nombre}</td><td>${e.matricula}</td><td>${e.grado}</td><td>${e.seccion||"—"}</td><td>${e.tutor||"—"}</td></tr>`
-        ).join("");
+        tbody.innerHTML = data.map(e => `
+            <tr>
+                <td>${e.nombre}</td>
+                <td>${e.matricula}</td>
+                <td>${e.grado}</td>
+                <td>${e.seccion||"—"}</td>
+                <td>${e.tutor||"—"}</td>
+                <td style="white-space:nowrap">
+                    <button onclick="editarEstudiante(${e.id})"
+                        style="background:#1565c0;color:#fff;padding:5px 12px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-right:6px">
+                        Editar</button>
+                    <button onclick="eliminarEstudiante(${e.id},'${e.nombre.replace(/'/g,"\\\'")}')"
+                        style="background:#c62828;color:#fff;padding:5px 12px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">
+                        Eliminar</button>
+                </td>
+            </tr>`).join("");
     } catch (err) { console.error("Error estudiantes:", err); }
 }
 

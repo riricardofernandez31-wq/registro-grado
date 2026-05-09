@@ -507,6 +507,23 @@ body {
     box-shadow: 0 8px 20px rgba(13,71,161,0.3);
 }
 
+.btn-secondary {
+    padding: 13px 28px;
+    background: #e0e0e0;
+    color: #333;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    width: auto;
+}
+
+.btn-secondary:hover {
+    background: #bdbdbd;
+}
+
 /* ===================== MESSAGES ===================== */
 
 .msg-success {
