@@ -64,6 +64,9 @@
             <a href="#" class="nav-item" data-section="reportes">
                 <span class="nav-icon">&#128196;</span> Reportes
             </a>
+            <a href="#" class="nav-item" data-section="aulas">
+                <span class="nav-icon">🏫</span> Aulas
+            </a>
             <a href="#" class="nav-item" data-section="usuarios">
                 <span class="nav-icon">&#128101;</span> Usuarios
             </a>
@@ -279,6 +282,86 @@
                 </div>
                 <div id="reporteContenido" style="margin-top:24px"></div>
             </div>
+        </section>
+
+        <!-- AULAS -->
+        <section id="sec-aulas" class="section">
+            <div class="panel">
+                <h2 class="panel-title">🏫 Gestión de Aulas</h2>
+
+                <!-- FORMULARIO CREAR/EDITAR AULA -->
+                <div class="panel-section">
+                    <h3>Crear / Editar Aula</h3>
+                    <form id="formAula" class="form-grid">
+                        <div class="field">
+                            <label>Número/Nombre Aula *</label>
+                            <input type="text" id="aula-numero" placeholder="Ej: Aula 5, Bloque B-3" required>
+                        </div>
+                        <div class="field">
+                            <label>Grado *</label>
+                            <select id="aula-grado" required>
+                                <option value="">-- Seleccionar --</option>
+                                <option value="1ro">1ro de Primaria</option>
+                                <option value="2do">2do de Primaria</option>
+                                <option value="3ro">3ro de Primaria</option>
+                                <option value="4to">4to de Primaria</option>
+                                <option value="5to">5to de Primaria</option>
+                                <option value="6to">6to de Primaria</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label>Sección *</label>
+                            <select id="aula-seccion" required>
+                                <option value="">-- Seleccionar --</option>
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                                <option value="C">C</option>
+                                <option value="D">D</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label>Capacidad</label>
+                            <input type="number" id="aula-capacidad" placeholder="35" min="1" max="50">
+                        </div>
+                        <div class="field field-full">
+                            <label>Maestro Guía</label>
+                            <select id="aula-maestro-guia">
+                                <option value="">-- Sin asignar --</option>
+                            </select>
+                        </div>
+                        <div class="field field-full form-actions">
+                            <button type="submit" id="btnSubmitAula" class="btn-primary">Guardar Aula</button>
+                            <button type="button" id="btnCancelarAula" class="btn-secondary" style="display:none">Cancelar Edición</button>
+                        </div>
+                    </form>
+                    <div id="msgAula" style="display:none;margin-top:12px;padding:10px 14px;border-radius:8px;background:#d4edda;color:#155724;border:1px solid #c3e6cb"></div>
+                </div>
+
+                <!-- TABLA DE AULAS -->
+                <div class="panel-section">
+                    <h3>Lista de Aulas</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Aula</th>
+                                <th>Grado</th>
+                                <th>Sección</th>
+                                <th>Capacidad</th>
+                                <th>Maestro Guía</th>
+                                <th>Estudiantes</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaAulas">
+                            <tr><td colspan="8" class="empty-row">Cargando aulas...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- DETALLE DEL AULA -->
+            <div id="detalleAulaContenedor"></div>
         </section>
 
         <!-- USUARIOS -->

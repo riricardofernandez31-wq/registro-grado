@@ -7,6 +7,9 @@ const API = "https://registro-grado-production.up.railway.app/api";
 let usuarioActual    = null;
 let estudiantesCache = [];
 let editandoEstudianteId = null;
+let aulasCache = [];
+let maestrosCache = [];
+let editandoAulaId = null;
 
 function parseFechaMySQL(fecha) {
     if (!fecha) return null;
@@ -810,3 +813,247 @@ async function agregarParticipacion(estudianteId) {
         mostrarFichaEstudiante(estudianteId);
     } catch (err) { alert("No se pudo conectar al servidor."); }
 }
+
+// =============================================
+//  AULAS
+// =============================================
+
+async function cargarMaestrosDropdown() {
+    try {
+        const res = await fetch(`${API}/maestros`);
+        const data = await res.json();
+        if (!res.ok) return;
+        maestrosCache = data;
+        const select = document.getElementById("aula-maestro-guia");
+        if (!select) return;
+        select.innerHTML = '<option value="">-- Sin asignar --</option>' +
+            data.map(m => `<option value="${m.id}">${m.nombre}${m.especialidad ? ' (' + m.especialidad + ')' : ''}</option>`).join("");
+    } catch (err) { console.error("Error cargando maestros:", err); }
+}
+
+async function cargarTablaAulas() {
+    try {
+        const res = await fetch(`${API}/aulas`);
+        const data = await res.json();
+        if (!res.ok || !Array.isArray(data)) return;
+
+        aulasCache = data;
+        const tbody = document.getElementById("tablaAulas");
+        if (!tbody) return;
+
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-row">No hay aulas registradas.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = data.map((a, idx) => `
+            <tr>
+                <td>${idx + 1}</td>
+                <td><strong>${a.aula_numero || 'Aula ' + a.grado + '-' + a.seccion}</strong></td>
+                <td>${a.grado}</td>
+                <td>${a.seccion}</td>
+                <td>${a.capacidad}</td>
+                <td>${a.nombre_maestro || '—'}</td>
+                <td><span style="background:#e3f2fd;color:#1565c0;padding:4px 8px;border-radius:4px;font-weight:600;font-size:12px">${a.estudiantes_count || 0}</span></td>
+                <td style="white-space:nowrap;font-size:12px">
+                    <button onclick="verDetalleAula(${a.id})" style="background:#1565c0;color:#fff;padding:5px 10px;border:none;border-radius:4px;cursor:pointer;margin-right:4px">Ver</button>
+                    <button onclick="editarAula(${a.id})" style="background:#2e7d32;color:#fff;padding:5px 10px;border:none;border-radius:4px;cursor:pointer;margin-right:4px">Editar</button>
+                    <button onclick="eliminarAula(${a.id},'${(a.aula_numero || '').replace(/'/g, "\\'")}')" style="background:#c62828;color:#fff;padding:5px 10px;border:none;border-radius:4px;cursor:pointer">Eliminar</button>
+                </td>
+            </tr>`).join("");
+    } catch (err) { console.error("Error:", err); }
+}
+
+document.getElementById("formAula")?.addEventListener("submit", async function(e) {
+    e.preventDefault();
+
+    const datos = {
+        aula_numero: document.getElementById("aula-numero").value.trim(),
+        grado: document.getElementById("aula-grado").value,
+        seccion: document.getElementById("aula-seccion").value,
+        capacidad: parseInt(document.getElementById("aula-capacidad").value) || 35,
+        maestro_guia_id: document.getElementById("aula-maestro-guia").value || null
+    };
+
+    try {
+        const url = editandoAulaId ? `${API}/aulas/${editandoAulaId}` : `${API}/aulas`;
+        const method = editandoAulaId ? "PUT" : "POST";
+
+        const res = await fetch(url, {
+            method,
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(datos)
+        });
+        const data = await res.json();
+
+        if (!res.ok) { alert(data.error || "Error"); return; }
+
+        this.reset();
+        cancelarEdicionAula();
+
+        const msg = document.getElementById("msgAula");
+        if (msg) {
+            msg.textContent = "Aula guardada exitosamente.";
+            msg.style.display = "block";
+            setTimeout(() => msg.style.display = "none", 3000);
+        }
+
+        cargarTablaAulas();
+    } catch (err) { alert("No se pudo conectar."); }
+});
+
+function editarAula(id) {
+    const aula = aulasCache.find(a => a.id === id);
+    if (!aula) return;
+
+    editandoAulaId = id;
+    document.getElementById("aula-numero").value = aula.aula_numero || "";
+    document.getElementById("aula-grado").value = aula.grado;
+    document.getElementById("aula-seccion").value = aula.seccion;
+    document.getElementById("aula-capacidad").value = aula.capacidad;
+    document.getElementById("aula-maestro-guia").value = aula.maestro_guia_id || "";
+
+    document.getElementById("btnSubmitAula").textContent = "Actualizar Aula";
+    document.getElementById("btnCancelarAula").style.display = "inline-block";
+    document.querySelector("#sec-aulas .panel-title").textContent = "🏫 Editar Aula";
+
+    document.getElementById("aula-numero").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function cancelarEdicionAula() {
+    editandoAulaId = null;
+    document.getElementById("formAula").reset();
+    document.getElementById("btnSubmitAula").textContent = "Guardar Aula";
+    document.getElementById("btnCancelarAula").style.display = "none";
+    document.querySelector("#sec-aulas .panel-title").textContent = "🏫 Gestión de Aulas";
+}
+
+document.getElementById("btnCancelarAula")?.addEventListener("click", cancelarEdicionAula);
+
+async function eliminarAula(id, nombre) {
+    if (!confirm(`¿Eliminar aula "${nombre}"?`)) return;
+    try {
+        const res = await fetch(`${API}/aulas/${id}`, { method: "DELETE" });
+        if (!res.ok) { alert("Error al eliminar."); return; }
+        cargarTablaAulas();
+    } catch (err) { alert("No se pudo conectar."); }
+}
+
+async function verDetalleAula(aulaId) {
+    const contenedor = document.getElementById("detalleAulaContenedor");
+    contenedor.innerHTML = '<div class="panel"><p style="color:#888">Cargando detalle...</p></div>';
+
+    try {
+        const aula = aulasCache.find(a => a.id === aulaId);
+        if (!aula) return;
+
+        const resEst = await fetch(`${API}/estudiantes`);
+        const todosEstudiantes = await resEst.json();
+        const estudiantes = todosEstudiantes.filter(e => e.aula_id === aulaId && e.activo === 1);
+
+        const resAsign = await fetch(`${API}/asignaciones/aula/${aulaId}`);
+        const asignaciones = await resAsign.json();
+
+        let html = `
+            <div class="ficha-estudiante" style="margin-top:20px;background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.06)">
+                <div class="ficha-header" style="background:linear-gradient(135deg,#0d2352,#1565c0);padding:28px 32px;display:flex;align-items:center;gap:20px;color:#fff;border-radius:12px 12px 0 0">
+                    <div style="width:68px;height:68px;background:rgba(255,255,255,0.18);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px;border:2px solid rgba(255,255,255,0.35)">🏫</div>
+                    <div>
+                        <h2 style="margin:0;font-size:24px;font-weight:700">${aula.aula_numero || aula.grado + '-' + aula.seccion}</h2>
+                        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                            <span style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:4px;font-size:12px">Grado: ${aula.grado}</span>
+                            <span style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:4px;font-size:12px">Sección: ${aula.seccion}</span>
+                            <span style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:4px;font-size:12px">Capacidad: ${aula.capacidad}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="padding:24px">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px">
+                        <div>
+                            <h4 style="font-size:13px;font-weight:700;color:#0d2352;text-transform:uppercase;margin:0 0 12px 0;padding-bottom:8px;border-bottom:2px solid #f0f4fa">Información</h4>
+                            <div style="margin:8px 0"><span style="color:#888">Maestro Guía:</span> <strong>${aula.nombre_maestro || 'Sin asignar'}</strong></div>
+                            <div style="margin:8px 0"><span style="color:#888">Estudiantes:</span> <strong>${estudiantes.length}/${aula.capacidad}</strong></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 style="font-size:13px;font-weight:700;color:#0d2352;text-transform:uppercase;margin:0 0 12px 0;padding-bottom:8px;border-bottom:2px solid #f0f4fa">Estudiantes (${estudiantes.length})</h4>
+                        ${estudiantes.length === 0 ? '<p style="color:#888">Sin estudiantes asignados.</p>' : `
+                            <table class="data-table" style="margin-top:12px">
+                                <thead><tr><th>#</th><th>Nombre</th><th>Matrícula</th><th>Cedula</th></tr></thead>
+                                <tbody>
+                                    ${estudiantes.map((e, i) => `<tr><td>${i+1}</td><td>${e.nombre}</td><td>${e.matricula}</td><td>${e.cedula||'—'}</td></tr>`).join("")}
+                                </tbody>
+                            </table>`}
+                    </div>
+
+                    <div style="margin-top:24px">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                            <h4 style="font-size:13px;font-weight:700;color:#0d2352;text-transform:uppercase;margin:0;padding-bottom:8px;border-bottom:2px solid #f0f4fa;flex:1">Asignaturas y Maestros</h4>
+                        </div>
+                        <button onclick="mostrarFormAgregarAsignacion(${aulaId})" style="background:linear-gradient(135deg,#0d47a1,#1976d2);color:#fff;border:none;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:600;margin-bottom:12px;font-size:13px">+ Agregar Asignación</button>
+                        ${asignaciones.length === 0 ? '<p style="color:#888">Sin asignaciones registradas.</p>' : `
+                            <table class="data-table">
+                                <thead><tr><th>Asignatura</th><th>Maestro</th><th>Especialidad</th><th>Acciones</th></tr></thead>
+                                <tbody>
+                                    ${asignaciones.map(a => `<tr>
+                                        <td><strong>${a.asignatura}</strong></td>
+                                        <td>${a.nombre_maestro}</td>
+                                        <td>${a.especialidad || '—'}</td>
+                                        <td><button onclick="eliminarAsignacion(${a.id},${aulaId})" style="background:#c62828;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600">Quitar</button></td>
+                                    </tr>`).join("")}
+                                </tbody>
+                            </table>`}
+                    </div>
+                </div>
+            </div>`;
+
+        contenedor.innerHTML = html;
+        contenedor.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (err) {
+        contenedor.innerHTML = '<div class="panel"><p style="color:#888">Error al cargar detalle.</p></div>';
+    }
+}
+
+async function mostrarFormAgregarAsignacion(aulaId) {
+    const asignatura = prompt("Ingresa la asignatura (Ej: Matemáticas, Español, Ciencias):");
+    if (!asignatura || !asignatura.trim()) return;
+
+    const maestroId = prompt("ID del maestro (usa la lista de maestros registrados):");
+    if (!maestroId) return;
+
+    try {
+        const res = await fetch(`${API}/asignaciones`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                aula_id: aulaId,
+                asignatura: asignatura.trim(),
+                maestro_id: parseInt(maestroId)
+            })
+        });
+        const data = await res.json();
+
+        if (!res.ok) { alert(data.error || "Error al asignar."); return; }
+        alert("Asignación agregada exitosamente.");
+        verDetalleAula(aulaId);
+    } catch (err) { alert("Error de conexión."); }
+}
+
+async function eliminarAsignacion(id, aulaId) {
+    if (!confirm("¿Quitar esta asignación?")) return;
+    try {
+        const res = await fetch(`${API}/asignaciones/${id}`, { method: "DELETE" });
+        if (!res.ok) { alert("Error"); return; }
+        verDetalleAula(aulaId);
+    } catch (err) { alert("Error de conexión."); }
+}
+
+// Listener para el nav item Aulas
+document.querySelector('[data-section="aulas"]')?.addEventListener("click", function(e) {
+    e.preventDefault();
+    mostrarSeccion("aulas");
+    cargarMaestrosDropdown();
+    cargarTablaAulas();
+});

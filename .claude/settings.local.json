@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(railway --version)",
+      "Bash(mysql --version)",
+      "Bash(python3 -c \"import pymysql; print\\('pymysql ok'\\)\")",
+      "Bash(python -c \"import pymysql; print\\('pymysql ok'\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
+    ]
+  }
+}

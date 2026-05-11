@@ -185,7 +185,9 @@ function initDB() {
         `ALTER TABLE estudiantes ADD COLUMN direccion        VARCHAR(300)          DEFAULT NULL`,
         `ALTER TABLE estudiantes ADD COLUMN observaciones    TEXT                  DEFAULT NULL`,
         `ALTER TABLE estudiantes ADD COLUMN activo           TINYINT(1) NOT NULL DEFAULT 1`,
-        `ALTER TABLE estudiantes ADD COLUMN creado_en        TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP`
+        `ALTER TABLE estudiantes ADD COLUMN creado_en        TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP`,
+        `ALTER TABLE aulas ADD COLUMN maestro_guia_id        INT                   DEFAULT NULL`,
+        `ALTER TABLE aulas ADD CONSTRAINT fk_aula_maestro_guia FOREIGN KEY (maestro_guia_id) REFERENCES maestros(id) ON DELETE SET NULL ON UPDATE CASCADE`
     ];
 
     const datos = [
@@ -412,6 +414,175 @@ app.post("/api/usuarios", function(req, res) {
 app.delete("/api/usuarios/:id", function(req, res) {
     db.query("DELETE FROM usuarios WHERE id = ?", [req.params.id], function(err) {
         if (err) return res.status(500).json({ error: "Error al eliminar usuario." });
+        res.json({ ok: true });
+    });
+});
+
+// =============================================
+//  AULAS
+// =============================================
+app.get("/api/aulas", function(req, res) {
+    const sql = `SELECT a.*, m.nombre AS nombre_maestro, m.especialidad,
+                 (SELECT COUNT(*) FROM estudiantes WHERE aula_id = a.id AND activo = 1) AS estudiantes_count
+                 FROM aulas a LEFT JOIN maestros m ON a.maestro_guia_id = m.id
+                 ORDER BY a.grado, a.seccion`;
+    db.query(sql, function(err, results) {
+        if (err) return res.status(500).json({ error: "Error al obtener aulas." });
+        res.json(results);
+    });
+});
+
+app.post("/api/aulas", function(req, res) {
+    const { aula_numero, grado, seccion, capacidad, maestro_guia_id, anio_escolar } = req.body;
+    if (!grado || !seccion)
+        return res.status(400).json({ error: "Grado y sección son obligatorios." });
+
+    const año = anio_escolar || "2025-2026";
+    db.query(
+        "INSERT INTO aulas (aula_numero, grado, seccion, capacidad, maestro_guia_id, anio_escolar) VALUES (?, ?, ?, ?, ?, ?)",
+        [aula_numero || null, grado, seccion, capacidad || 35, maestro_guia_id || null, año],
+        function(err, result) {
+            if (err) {
+                if (err.code === "ER_DUP_ENTRY")
+                    return res.status(409).json({ error: "Ya existe un aula con ese grado y sección." });
+                return res.status(500).json({ error: "Error al crear aula." });
+            }
+            res.json({ ok: true, id: result.insertId });
+        });
+});
+
+app.put("/api/aulas/:id", function(req, res) {
+    const { aula_numero, grado, seccion, capacidad, maestro_guia_id } = req.body;
+    if (!grado || !seccion)
+        return res.status(400).json({ error: "Grado y sección son obligatorios." });
+
+    db.query(
+        "UPDATE aulas SET aula_numero=?, grado=?, seccion=?, capacidad=?, maestro_guia_id=? WHERE id=?",
+        [aula_numero || null, grado, seccion, capacidad || 35, maestro_guia_id || null, req.params.id],
+        function(err) {
+            if (err) return res.status(500).json({ error: "Error al actualizar aula." });
+            res.json({ ok: true });
+        });
+});
+
+app.delete("/api/aulas/:id", function(req, res) {
+    db.query("DELETE FROM aulas WHERE id = ?", [req.params.id], function(err) {
+        if (err) return res.status(500).json({ error: "Error al eliminar aula." });
+        res.json({ ok: true });
+    });
+});
+
+// =============================================
+//  MAESTROS
+// =============================================
+app.get("/api/maestros", function(req, res) {
+    db.query("SELECT * FROM maestros WHERE activo = 1 ORDER BY nombre", function(err, results) {
+        if (err) return res.status(500).json({ error: "Error al obtener maestros." });
+        res.json(results);
+    });
+});
+
+app.post("/api/maestros", function(req, res) {
+    const { nombre, usuario_id, cedula, especialidad, telefono, email } = req.body;
+    if (!nombre)
+        return res.status(400).json({ error: "Nombre es obligatorio." });
+
+    db.query(
+        "INSERT INTO maestros (nombre, usuario_id, cedula, especialidad, telefono, email) VALUES (?, ?, ?, ?, ?, ?)",
+        [nombre, usuario_id || null, cedula || null, especialidad || null, telefono || null, email || null],
+        function(err, result) {
+            if (err) {
+                if (err.code === "ER_DUP_ENTRY")
+                    return res.status(409).json({ error: "Ese número de cédula ya existe." });
+                return res.status(500).json({ error: "Error al crear maestro." });
+            }
+            res.json({ ok: true, id: result.insertId });
+        });
+});
+
+app.put("/api/maestros/:id", function(req, res) {
+    const { nombre, usuario_id, cedula, especialidad, telefono, email } = req.body;
+    if (!nombre)
+        return res.status(400).json({ error: "Nombre es obligatorio." });
+
+    db.query(
+        "UPDATE maestros SET nombre=?, usuario_id=?, cedula=?, especialidad=?, telefono=?, email=? WHERE id=?",
+        [nombre, usuario_id || null, cedula || null, especialidad || null, telefono || null, email || null, req.params.id],
+        function(err) {
+            if (err) return res.status(500).json({ error: "Error al actualizar maestro." });
+            res.json({ ok: true });
+        });
+});
+
+app.delete("/api/maestros/:id", function(req, res) {
+    db.query("UPDATE maestros SET activo = 0 WHERE id = ?", [req.params.id], function(err) {
+        if (err) return res.status(500).json({ error: "Error al eliminar maestro." });
+        res.json({ ok: true });
+    });
+});
+
+// =============================================
+//  ASIGNACIONES (Maestro + Aula + Asignatura)
+// =============================================
+app.get("/api/asignaciones", function(req, res) {
+    const sql = `SELECT a.*, m.nombre AS nombre_maestro, m.especialidad,
+                 CONCAT(au.grado, '-', au.seccion) AS aula_nombre
+                 FROM asignaciones a
+                 JOIN maestros m ON a.maestro_id = m.id
+                 JOIN aulas au ON a.aula_id = au.id
+                 ORDER BY au.grado, au.seccion, a.asignatura`;
+    db.query(sql, function(err, results) {
+        if (err) return res.status(500).json({ error: "Error al obtener asignaciones." });
+        res.json(results);
+    });
+});
+
+app.get("/api/asignaciones/aula/:aulaId", function(req, res) {
+    const sql = `SELECT a.*, m.nombre AS nombre_maestro, m.especialidad
+                 FROM asignaciones a
+                 JOIN maestros m ON a.maestro_id = m.id
+                 WHERE a.aula_id = ? AND a.anio_escolar = '2025-2026'
+                 ORDER BY a.asignatura`;
+    db.query(sql, [req.params.aulaId], function(err, results) {
+        if (err) return res.status(500).json({ error: "Error al obtener asignaciones." });
+        res.json(results);
+    });
+});
+
+app.get("/api/asignaciones/maestro/:maestroId", function(req, res) {
+    const sql = `SELECT a.*, au.grado, au.seccion
+                 FROM asignaciones a
+                 JOIN aulas au ON a.aula_id = au.id
+                 WHERE a.maestro_id = ?
+                 ORDER BY au.grado, au.seccion`;
+    db.query(sql, [req.params.maestroId], function(err, results) {
+        if (err) return res.status(500).json({ error: "Error al obtener asignaciones." });
+        res.json(results);
+    });
+});
+
+app.post("/api/asignaciones", function(req, res) {
+    const { maestro_id, aula_id, asignatura, anio_escolar } = req.body;
+    if (!maestro_id || !aula_id || !asignatura)
+        return res.status(400).json({ error: "Maestro, aula y asignatura son obligatorios." });
+
+    const año = anio_escolar || "2025-2026";
+    db.query(
+        "INSERT INTO asignaciones (maestro_id, aula_id, asignatura, anio_escolar) VALUES (?, ?, ?, ?)",
+        [maestro_id, aula_id, asignatura, año],
+        function(err, result) {
+            if (err) {
+                if (err.code === "ER_DUP_ENTRY")
+                    return res.status(409).json({ error: "Ya existe una asignación para esa materia en el aula." });
+                return res.status(500).json({ error: "Error al crear asignación." });
+            }
+            res.json({ ok: true, id: result.insertId });
+        });
+});
+
+app.delete("/api/asignaciones/:id", function(req, res) {
+    db.query("DELETE FROM asignaciones WHERE id = ?", [req.params.id], function(err) {
+        if (err) return res.status(500).json({ error: "Error al eliminar asignación." });
         res.json({ ok: true });
     });
 });
