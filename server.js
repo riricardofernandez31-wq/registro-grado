@@ -1182,7 +1182,6 @@ app.get("/api/dashboard/promedios-por-grado", function(req, res) {
         LEFT JOIN calificaciones c ON e.id=c.estudiante_id AND c.final IS NOT NULL
         WHERE e.activo=1
         GROUP BY e.grado
-        ORDER BY FIELD(e.grado, '1ro','2do','3ro','4to','5to','6to')
     `;
 
         db.query(sql, function(err, rows) {
