@@ -177,7 +177,19 @@ async function cargarDashboard() {
             return;
         }
         estudiantesCache = data;
-        document.getElementById("totalEstudiantes").textContent = data.length;
+        // Actualizar KPIs visibles en el dashboard
+        const kpiEst = document.getElementById("kpi-estudiantes");
+        if (kpiEst) kpiEst.textContent = data.length;
+        const kpiAulas = document.getElementById("kpi-aulas");
+        if (kpiAulas) kpiAulas.textContent = aulasCache.length || 0;
+        const kpiMaestros = document.getElementById("kpi-maestros");
+        if (kpiMaestros) kpiMaestros.textContent = maestrosCache.length || 0;
+        const kpiAsistencia = document.getElementById("kpi-asistencia");
+        if (kpiAsistencia) kpiAsistencia.textContent = kpiAsistencia.textContent || 0;
+        const kpiPromedio = document.getElementById("kpi-promedio");
+        if (kpiPromedio) kpiPromedio.textContent = kpiPromedio.textContent || 0;
+        const kpiAlertas = document.getElementById("kpi-alertas");
+        if (kpiAlertas) kpiAlertas.textContent = kpiAlertas.textContent || 0;
         const tbody     = document.getElementById("tablaRecientes");
         const recientes = data.slice(0, 5);
         if (recientes.length === 0) {
@@ -489,6 +501,14 @@ function exportar(formato, tipo) {
     window.open(`${API}/exportar/${formato}/${tipo}`, "_blank");
 }
 
+function exportarBoletin(formato, estudianteId) {
+    if (!estudianteId) {
+        alert("Debe seleccionar un estudiante.");
+        return;
+    }
+    window.open(`${API}/exportar/boletin/${formato}/${estudianteId}`, "_blank");
+}
+
 // =============================================
 //  USUARIOS
 // =============================================
@@ -790,6 +810,20 @@ async function mostrarFichaEstudiante(id) {
                         <button onclick="agregarParticipacion(${e.id})" class="btn-primary" style="padding:10px 18px;font-size:13px;white-space:nowrap;width:auto">+ Agregar</button>
                     </div>
                     <div id="participaciones-lista-${e.id}">${partsHTML}</div>
+                </div>
+
+                <div class="ficha-section" style="background:#f9f9f9;border-top:2px solid #0d2352;padding-top:20px">
+                    <h4 class="ficha-section-title">Boletín Estudiantil</h4>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap">
+                        <button onclick="exportarBoletin('pdf',${e.id})"
+                            style="background:#0d2352;color:#fff;padding:10px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;flex:1;min-width:150px">
+                            📄 Descargar Boletín PDF
+                        </button>
+                        <button onclick="exportarBoletin('excel',${e.id})"
+                            style="background:#1565c0;color:#fff;padding:10px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;flex:1;min-width:150px">
+                            📊 Descargar Boletín Excel
+                        </button>
+                    </div>
                 </div>
             </div>`;
 

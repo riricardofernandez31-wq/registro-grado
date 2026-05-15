@@ -718,6 +718,566 @@ app.get("/api/exportar/excel/:tipo", async function(req, res) {
     });
 });
 
+// =============================================
+//  BOLETÍN ESTUDIANTIL MINERD
+// =============================================
+
+app.get("/api/exportar/boletin/pdf/:estudianteId", function(req, res) {
+    const estudianteId = parseInt(req.params.estudianteId);
+    if (isNaN(estudianteId)) return res.status(400).json({ error: "ID de estudiante inválido." });
+
+    // Obtener configuración del centro
+    db.query("SELECT * FROM configuracion LIMIT 1", function(err, config) {
+        if (err || !config.length) return res.status(500).json({ error: "Error al obtener configuración." });
+        const cfg = config[0];
+
+        // Obtener datos del estudiante
+        db.query(
+            "SELECT * FROM estudiantes WHERE id = ? AND activo = 1",
+            [estudianteId], function(err1, estudiantes) {
+                if (err1 || !estudiantes.length)
+                    return res.status(404).json({ error: "Estudiante no encontrado." });
+                const est = estudiantes[0];
+
+                // Obtener calificaciones del estudiante
+                db.query(
+                    `SELECT c.*, m.nombre as maestro_nombre
+                     FROM calificaciones c
+                     LEFT JOIN asignaciones a ON c.asignacion_id = a.id
+                     LEFT JOIN maestros m ON a.maestro_id = m.id
+                     WHERE c.estudiante_id = ? AND c.anio_escolar = ?
+                     ORDER BY c.asignatura`,
+                    [estudianteId, cfg.anio_escolar], function(err2, calificaciones) {
+                        if (err2) return res.status(500).json({ error: "Error al obtener calificaciones." });
+
+                        // Obtener resumen de asistencia del período
+                        db.query(
+                            `SELECT estado, COUNT(*) as cantidad
+                             FROM asistencia
+                             WHERE estudiante_id = ? AND YEAR(fecha) = YEAR(CURDATE())
+                             GROUP BY estado`,
+                            [estudianteId], function(err3, asistencia) {
+                                if (err3) return res.status(500).json({ error: "Error al obtener asistencia." });
+
+                                // Calcular promedio
+                                const finales = calificaciones
+                                    .filter(c => c.final !== null)
+                                    .map(c => parseFloat(c.final));
+                                const promedio = finales.length > 0
+                                    ? (finales.reduce((a, b) => a + b, 0) / finales.length).toFixed(2)
+                                    : "S.D.";
+
+                                // Estructurar datos de asistencia
+                                const stats = { presente: 0, ausente: 0, tardanza: 0, excusa: 0 };
+                                asistencia.forEach(a => {
+                                    if (stats[a.estado] !== undefined) stats[a.estado] = a.cantidad;
+                                });
+
+                                // Generar PDF
+                                const doc = new PDFKit({ margin: 40, size: 'letter' });
+                                res.setHeader("Content-Type", "application/pdf");
+                                res.setHeader("Content-Disposition", `attachment; filename="boletin_${est.matricula}.pdf"`);
+                                doc.pipe(res);
+
+                                // Encabezado MINERD
+                                doc.fontSize(14).fillColor("#0d2352").text("MINISTERIO DE EDUCACIÓN", { align: "center" });
+                                doc.fontSize(12).fillColor("#0d2352").text("REPÚBLICA DOMINICANA", { align: "center" });
+                                doc.moveDown(0.3);
+                                doc.fontSize(11).fillColor("#333").text(cfg.nombre_centro || "Centro Educativo", { align: "center" });
+                                doc.fontSize(9).fillColor("#666").text(`Año Escolar: ${cfg.anio_escolar}`, { align: "center" });
+                                doc.moveDown(0.5);
+
+                                // Línea separadora
+                                doc.moveTo(40, doc.y).lineTo(doc.page.width - 40, doc.y).stroke("#0d2352");
+                                doc.moveDown(0.5);
+
+                                // Título
+                                doc.fontSize(14).fillColor("#0d2352").text("BOLETÍN ESTUDIANTIL", { align: "center" });
+                                doc.moveDown(0.5);
+
+                                // Datos del estudiante
+                                const fieldLeft = 50;
+                                const fieldRight = doc.page.width / 2 + 20;
+                                const lineHeight = 18;
+                                let currentY = doc.y;
+
+                                doc.fontSize(9).fillColor("#333");
+                                doc.text(`Nombre: ${est.nombre}`, fieldLeft, currentY);
+                                doc.text(`Matrícula: ${est.matricula}`, fieldRight, currentY);
+
+                                currentY += lineHeight;
+                                doc.text(`Grado: ${est.grado}`, fieldLeft, currentY);
+                                doc.text(`Sección: ${est.seccion}`, fieldRight, currentY);
+
+                                currentY += lineHeight;
+                                doc.text(`Tutor: ${est.tutor || "N/A"}`, fieldLeft, currentY);
+                                doc.text(`Teléfono: ${est.telefono || "N/A"}`, fieldRight, currentY);
+
+                                doc.moveDown(1.5);
+
+                                // Tabla de calificaciones
+                                doc.fontSize(10).fillColor("#0d2352").text("CALIFICACIONES POR ASIGNATURA", { underline: true });
+                                doc.moveDown(0.3);
+
+                                const tableTop = doc.y;
+                                const colWidths = [150, 60, 60, 60, 60];
+                                const headers = ["Asignatura", "Parc. 1", "Parc. 2", "Final", "Maestro"];
+
+                                // Encabezado de tabla
+                                let tableX = 40;
+                                doc.fontSize(9).fillColor("#fff");
+                                doc.rect(40, tableTop, doc.page.width - 80, 18).fill("#0d2352");
+                                headers.forEach((h, i) => {
+                                    doc.text(h, tableX + 3, tableTop + 3, { width: colWidths[i] - 6 });
+                                    tableX += colWidths[i];
+                                });
+
+                                // Filas de calificaciones
+                                let currentRow = tableTop + 20;
+                                calificaciones.forEach((calif, idx) => {
+                                    const bgColor = idx % 2 === 0 ? "#f4f7ff" : "#ffffff";
+                                    tableX = 40;
+
+                                    doc.rect(40, currentRow, doc.page.width - 80, 16).fill(bgColor);
+                                    doc.fontSize(8).fillColor("#333");
+
+                                    doc.text(calif.asignatura || "", tableX + 3, currentRow + 2, { width: colWidths[0] - 6 });
+                                    tableX += colWidths[0];
+
+                                    doc.text(calif.parcial_1 !== null ? calif.parcial_1.toFixed(2) : "-", tableX + 3, currentRow + 2, { width: colWidths[1] - 6, align: "center" });
+                                    tableX += colWidths[1];
+
+                                    doc.text(calif.parcial_2 !== null ? calif.parcial_2.toFixed(2) : "-", tableX + 3, currentRow + 2, { width: colWidths[2] - 6, align: "center" });
+                                    tableX += colWidths[2];
+
+                                    doc.text(calif.final !== null ? calif.final.toFixed(2) : "-", tableX + 3, currentRow + 2, { width: colWidths[3] - 6, align: "center" });
+                                    tableX += colWidths[3];
+
+                                    doc.text(calif.maestro_nombre || "N/A", tableX + 3, currentRow + 2, { width: colWidths[4] - 6 });
+
+                                    currentRow += 18;
+                                    if (currentRow > doc.page.height - 100) {
+                                        doc.addPage();
+                                        currentRow = 40;
+                                    }
+                                });
+
+                                doc.moveDown(1);
+
+                                // Promedio general
+                                doc.fontSize(10).fillColor("#0d2352").text(`PROMEDIO GENERAL: ${promedio}`, { align: "right" });
+                                doc.moveDown(0.5);
+
+                                // Asistencia
+                                doc.fontSize(10).fillColor("#0d2352").text("RESUMEN DE ASISTENCIA", { underline: true });
+                                doc.moveDown(0.3);
+                                doc.fontSize(9).fillColor("#333");
+                                doc.text(`Presentes: ${stats.presente}  |  Ausentes: ${stats.ausente}  |  Tardanzas: ${stats.tardanza}  |  Excusas: ${stats.excusa}`);
+
+                                doc.moveDown(1.5);
+
+                                // Espacios para firmas
+                                doc.fontSize(10).fillColor("#0d2352").text("FIRMAS Y AUTORIZACIÓN", { underline: true });
+                                doc.moveDown(2);
+
+                                doc.fontSize(9).fillColor("#333");
+                                const firmaY = doc.y + 40;
+                                doc.moveTo(60, firmaY).lineTo(200, firmaY).stroke("#333");
+                                doc.text("Maestro/Tutor", 60, firmaY + 5, { width: 140 });
+
+                                doc.moveTo(300, firmaY).lineTo(440, firmaY).stroke("#333");
+                                doc.text("Director(a)", 300, firmaY + 5, { width: 140 });
+
+                                doc.moveDown(4);
+
+                                // Pie de página
+                                doc.fontSize(8).fillColor("#aaa").text(`Generado el ${new Date().toLocaleDateString("es-DO")} a las ${new Date().toLocaleTimeString("es-DO")}`, { align: "right" });
+
+                                doc.end();
+                            });
+                    });
+            });
+    });
+});
+
+app.get("/api/exportar/boletin/excel", async function(req, res) {
+    const estudianteId = req.query.estudianteId ? parseInt(req.query.estudianteId) : null;
+    const grado = req.query.grado || null;
+    const seccion = req.query.seccion || null;
+
+    let whereClause = "WHERE e.activo = 1";
+    let params = [];
+
+    if (estudianteId) {
+        whereClause += " AND e.id = ?";
+        params.push(estudianteId);
+    } else if (grado && seccion) {
+        whereClause += " AND e.grado = ? AND e.seccion = ?";
+        params.push(grado, seccion);
+    }
+
+    const sql = `SELECT e.*,
+                    (SELECT COUNT(*) FROM calificaciones WHERE estudiante_id = e.id) as total_asignaturas,
+                    (SELECT AVG(final) FROM calificaciones WHERE estudiante_id = e.id) as promedio_general
+                 FROM estudiantes e
+                 ${whereClause}
+                 ORDER BY e.nombre`;
+
+    db.query(sql, params, async function(err, estudiantes) {
+        if (err) return res.status(500).json({ error: "Error al generar Excel de boletines." });
+        if (!estudiantes.length) return res.status(404).json({ error: "No hay estudiantes para exportar." });
+
+        const workbook = new ExcelJS.Workbook();
+
+        // Obtener configuración
+        db.query("SELECT * FROM configuracion LIMIT 1", async function(err0, config) {
+            const cfg = config ? config[0] : {};
+
+            // Para cada estudiante, crear una hoja con su boletín
+            for (const est of estudiantes) {
+                const sheetName = (est.nombre.substring(0, 20) || "Estudiante").replace(/[^a-zA-Z0-9 ]/g, "");
+                const worksheet = workbook.addWorksheet(sheetName, { pageSetup: { paperSize: 9, orientation: 'portrait' } });
+
+                // Encabezado
+                let row = 1;
+                worksheet.mergeCells(`A${row}:D${row}`);
+                let cell = worksheet.getCell(`A${row}`);
+                cell.value = "BOLETÍN ESTUDIANTIL MINERD";
+                cell.font = { bold: true, size: 14, color: { argb: "FF0D2352" } };
+                cell.alignment = { horizontal: "center", vertical: "center" };
+
+                row++;
+                worksheet.mergeCells(`A${row}:D${row}`);
+                cell = worksheet.getCell(`A${row}`);
+                cell.value = cfg.nombre_centro || "Centro Educativo";
+                cell.font = { size: 11 };
+                cell.alignment = { horizontal: "center" };
+
+                row += 2;
+                worksheet.getCell(`A${row}`).value = "Estudiante:";
+                worksheet.getCell(`B${row}`).value = est.nombre;
+                row++;
+
+                worksheet.getCell(`A${row}`).value = "Matrícula:";
+                worksheet.getCell(`B${row}`).value = est.matricula;
+                row++;
+
+                worksheet.getCell(`A${row}`).value = "Grado:";
+                worksheet.getCell(`B${row}`).value = est.grado;
+                worksheet.getCell(`C${row}`).value = "Sección:";
+                worksheet.getCell(`D${row}`).value = est.seccion;
+                row++;
+
+                worksheet.getCell(`A${row}`).value = "Tutor:";
+                worksheet.getCell(`B${row}`).value = est.tutor || "N/A";
+                row += 2;
+
+                // Tabla de calificaciones
+                worksheet.getCell(`A${row}`).value = "CALIFICACIONES";
+                worksheet.getCell(`A${row}`).font = { bold: true, size: 11 };
+                row++;
+
+                const headers = ["Asignatura", "Parc. 1", "Parc. 2", "Final"];
+                headers.forEach((h, i) => {
+                    const cell = worksheet.getCell(row, i + 1);
+                    cell.value = h;
+                    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0D2352" } };
+                    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+                    cell.alignment = { horizontal: "center", vertical: "center" };
+                });
+                row++;
+
+                // Calificaciones del estudiante
+                db.query(
+                    "SELECT * FROM calificaciones WHERE estudiante_id = ? ORDER BY asignatura",
+                    [est.id], function(err, califs) {
+                        if (err) califs = [];
+
+                        califs.forEach((calif, idx) => {
+                            worksheet.getCell(row, 1).value = calif.asignatura;
+                            worksheet.getCell(row, 2).value = calif.parcial_1 !== null ? parseFloat(calif.parcial_1) : "-";
+                            worksheet.getCell(row, 3).value = calif.parcial_2 !== null ? parseFloat(calif.parcial_2) : "-";
+                            worksheet.getCell(row, 4).value = calif.final !== null ? parseFloat(calif.final) : "-";
+
+                            if (idx % 2 === 0) {
+                                for (let i = 1; i <= 4; i++) {
+                                    worksheet.getCell(row, i).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4F7FF" } };
+                                }
+                            }
+                            row++;
+                        });
+
+                        // Promedio
+                        worksheet.getCell(row, 1).value = "PROMEDIO";
+                        worksheet.getCell(row, 2).value = est.promedio_general !== null ? parseFloat(est.promedio_general).toFixed(2) : "S.D.";
+                        worksheet.getCell(row, 1).font = { bold: true };
+
+                        // Ajustar ancho de columnas
+                        worksheet.columns = [
+                            { width: 25 },
+                            { width: 12 },
+                            { width: 12 },
+                            { width: 12 }
+                        ];
+                    }
+                );
+            }
+
+            // Enviar archivo
+            res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            res.setHeader("Content-Disposition", `attachment; filename="boletines_${new Date().getTime()}.xlsx"`);
+            await workbook.xlsx.write(res);
+            res.end();
+        });
+    });
+});
+
+// =============================================
+//  DASHBOARD - ESTADÍSTICAS
+// =============================================
+
+app.get("/api/dashboard/stats", function(req, res) {
+    // Obtener configuración para año escolar
+    db.query("SELECT anio_escolar FROM configuracion LIMIT 1", function(err, config) {
+        const anioEscolar = config && config.length ? config[0].anio_escolar : "2025-2026";
+
+        // Queries en paralelo
+        const promises = [
+            new Promise((resolve) => {
+                db.query("SELECT COUNT(*) as total FROM estudiantes WHERE activo=1", function(err, rows) {
+                    resolve(err ? 0 : (rows[0]?.total || 0));
+                });
+            }),
+            new Promise((resolve) => {
+                // Asistencia hoy
+                db.query(`
+                    SELECT
+                        SUM(CASE WHEN estado='presente' THEN 1 ELSE 0 END) as presentes,
+                        COUNT(*) as total
+                    FROM asistencia WHERE DATE(fecha)=CURDATE()
+                `, function(err, rows) {
+                    if (err || !rows[0] || rows[0].total === 0) {
+                        resolve(0);
+                    } else {
+                        resolve((rows[0].presentes / rows[0].total) * 100);
+                    }
+                });
+            }),
+            new Promise((resolve) => {
+                // Promedio general
+                db.query(`
+                    SELECT AVG(final) as promedio
+                    FROM calificaciones
+                    WHERE final IS NOT NULL AND anio_escolar=?
+                `, [anioEscolar], function(err, rows) {
+                    resolve(err || !rows[0]?.promedio ? 0 : rows[0].promedio);
+                });
+            }),
+            new Promise((resolve) => {
+                // Alertas académicas (promedio < 70)
+                db.query(`
+                    SELECT COUNT(DISTINCT e.id) as alertas
+                    FROM estudiantes e
+                    LEFT JOIN calificaciones c ON e.id=c.estudiante_id
+                    WHERE e.activo=1
+                    GROUP BY e.id
+                    HAVING AVG(c.final) < 70 OR COUNT(c.id)=0
+                `, function(err, rows) {
+                    resolve(err ? 0 : rows.length);
+                });
+            }),
+            new Promise((resolve) => {
+                // Total aulas
+                db.query("SELECT COUNT(*) as total FROM aulas", function(err, rows) {
+                    resolve(err ? 0 : (rows[0]?.total || 0));
+                });
+            }),
+            new Promise((resolve) => {
+                // Total maestros activos
+                db.query("SELECT COUNT(*) as total FROM maestros WHERE activo=1", function(err, rows) {
+                    resolve(err ? 0 : (rows[0]?.total || 0));
+                });
+            })
+        ];
+
+        Promise.all(promises).then(([estudiantes, asistencia, promedio, alertas, aulas, maestros]) => {
+            res.json({
+                total_estudiantes: estudiantes,
+                asistencia_hoy: parseFloat(asistencia.toFixed(1)),
+                promedio_general: parseFloat(promedio.toFixed(2)),
+                alertas_academicas: alertas,
+                total_aulas: aulas,
+                total_maestros: maestros
+            });
+        });
+    });
+});
+
+app.get("/api/dashboard/asistencia-mensual", function(req, res) {
+    const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    const hoy = new Date();
+    const hace6meses = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1);
+
+    const sql = `
+        SELECT
+            DATE_FORMAT(fecha, '%Y-%m') as periodo,
+            MONTH(fecha) as mes,
+            SUM(CASE WHEN estado='presente' THEN 1 ELSE 0 END) as presentes,
+            COUNT(*) as total
+        FROM asistencia
+        WHERE fecha >= ?
+        GROUP BY DATE_FORMAT(fecha, '%Y-%m')
+        ORDER BY fecha ASC
+        LIMIT 6
+    `;
+
+    db.query(sql, [hace6meses], function(err, rows) {
+        if (err || !rows.length) {
+            return res.json(Array(6).fill(0).map((_, i) => ({
+                mes: meses[(hoy.getMonth() - 5 + i + 12) % 12],
+                porcentaje: 0
+            })));
+        }
+
+        const resultado = rows.map(r => ({
+            mes: meses[r.mes - 1],
+            porcentaje: r.total > 0 ? parseFloat(((r.presentes / r.total) * 100).toFixed(1)) : 0
+        }));
+
+        res.json(resultado);
+    });
+});
+
+app.get("/api/dashboard/promedios-por-grado", function(req, res) {
+    const grados = ["1ro", "2do", "3ro", "4to", "5to", "6to"];
+
+    const sql = `
+        SELECT
+            e.grado,
+            AVG(c.final) as promedio
+        FROM estudiantes e
+        LEFT JOIN calificaciones c ON e.id=c.estudiante_id AND c.final IS NOT NULL
+        WHERE e.activo=1
+        GROUP BY e.grado
+        ORDER BY FIELD(e.grado, '1ro','2do','3ro','4to','5to','6to')
+    `;
+
+    db.query(sql, function(err, rows) {
+        if (err || !rows.length) {
+            return res.json(grados.map(g => ({ grado: g, promedio: 0 })));
+        }
+
+        const mapa = {};
+        rows.forEach(r => {
+            mapa[r.grado] = r.promedio ? parseFloat(r.promedio.toFixed(2)) : 0;
+        });
+
+        const resultado = grados.map(g => ({
+            grado: g,
+            promedio: mapa[g] || 0
+        }));
+
+        res.json(resultado);
+    });
+});
+
+app.get("/api/dashboard/distribucion-notas", function(req, res) {
+    db.query("SELECT anio_escolar FROM configuracion LIMIT 1", function(err, config) {
+        const anioEscolar = config && config.length ? config[0].anio_escolar : "2025-2026";
+
+        const sql = `
+            SELECT
+                CASE
+                    WHEN promedio >= 90 THEN 'excelente'
+                    WHEN promedio >= 80 THEN 'bueno'
+                    WHEN promedio >= 70 THEN 'regular'
+                    ELSE 'bajo'
+                END as categoria,
+                COUNT(*) as cantidad
+            FROM (
+                SELECT e.id, AVG(c.final) as promedio
+                FROM estudiantes e
+                LEFT JOIN calificaciones c ON e.id=c.estudiante_id AND c.anio_escolar=?
+                WHERE e.activo=1
+                GROUP BY e.id
+            ) as stats
+            GROUP BY categoria
+        `;
+
+        db.query(sql, [anioEscolar], function(err, rows) {
+            const result = {
+                excelente: 0,
+                bueno: 0,
+                regular: 0,
+                bajo: 0
+            };
+
+            if (!err && rows.length) {
+                rows.forEach(r => {
+                    result[r.categoria] = r.cantidad;
+                });
+            }
+
+            res.json(result);
+        });
+    });
+});
+
+app.get("/api/dashboard/alertas-academicas", function(req, res) {
+    db.query("SELECT anio_escolar FROM configuracion LIMIT 1", function(err, config) {
+        const anioEscolar = config && config.length ? config[0].anio_escolar : "2025-2026";
+
+        const sql = `
+            SELECT
+                e.id,
+                e.nombre,
+                e.grado,
+                e.seccion,
+                COALESCE(AVG(c.final), 0) as promedio,
+                ROUND(
+                    (SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END) /
+                     NULLIF(COUNT(DISTINCT a.id), 0)) * 100, 1
+                ) as asistencia,
+                CASE
+                    WHEN COALESCE(AVG(c.final), 0) < 60 THEN 'critico'
+                    WHEN COALESCE(AVG(c.final), 0) < 70 THEN 'bajo'
+                    WHEN ROUND(
+                        (SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END) /
+                         NULLIF(COUNT(DISTINCT a.id), 0)) * 100, 1
+                    ) < 80 THEN 'riesgo'
+                    ELSE 'ok'
+                END as nivel_alerta
+            FROM estudiantes e
+            LEFT JOIN calificaciones c ON e.id=c.estudiante_id AND c.anio_escolar=?
+            LEFT JOIN asistencia a ON e.id=a.estudiante_id
+            WHERE e.activo=1
+            GROUP BY e.id, e.nombre, e.grado, e.seccion
+            HAVING promedio < 70 OR asistencia < 80
+            ORDER BY promedio ASC, asistencia ASC
+            LIMIT 15
+        `;
+
+        db.query(sql, [anioEscolar], function(err, rows) {
+            if (err) {
+                return res.status(500).json({ error: "Error al obtener alertas académicas." });
+            }
+
+            const alertas = rows.map(r => ({
+                id: r.id,
+                nombre: r.nombre,
+                grado: r.grado,
+                seccion: r.seccion || "—",
+                promedio: r.promedio || 0,
+                asistencia: r.asistencia || 0,
+                nivel_alerta: r.nivel_alerta
+            }));
+
+            res.json(alertas);
+        });
+    });
+});
+
 app.get("/api/estudiantes/:id/ficha", function(req, res) {
     const id = req.params.id;
     db.query(

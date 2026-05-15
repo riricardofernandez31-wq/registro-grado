@@ -6,6 +6,7 @@
     <title>Digitalizacion del Registro de Grado - MINERD</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.min.js"></script>
 </head>
 <body>
 
@@ -94,32 +95,93 @@
 
         <!-- INICIO -->
         <section id="sec-inicio" class="section active">
-            <div class="cards">
-                <div class="card card-blue">
-                    <div class="card-icon">&#128100;</div>
-                    <h3 id="totalEstudiantes">0</h3>
-                    <p>Estudiantes Registrados</p>
+            <!-- FILA 1: KPIs MEJORADOS -->
+            <div class="kpi-container">
+                <div class="kpi-card kpi-blue">
+                    <div class="kpi-icon">👥</div>
+                    <div class="kpi-content">
+                        <h4>Estudiantes</h4>
+                        <h2 id="kpi-estudiantes">0</h2>
+                    </div>
                 </div>
-                <div class="card card-green">
-                    <div class="card-icon">&#9989;</div>
-                    <h3>92%</h3>
-                    <p>Asistencia de Hoy</p>
+                <div class="kpi-card kpi-green">
+                    <div class="kpi-icon">✓</div>
+                    <div class="kpi-content">
+                        <h4>Asistencia Hoy</h4>
+                        <h2><span id="kpi-asistencia">0</span>%</h2>
+                    </div>
                 </div>
-                <div class="card card-purple">
-                    <div class="card-icon">&#128200;</div>
-                    <h3>87%</h3>
-                    <p>Promedio General</p>
+                <div class="kpi-card kpi-purple">
+                    <div class="kpi-icon">📊</div>
+                    <div class="kpi-content">
+                        <h4>Promedio General</h4>
+                        <h2><span id="kpi-promedio">0</span></h2>
+                    </div>
                 </div>
-                <div class="card card-red">
-                    <div class="card-icon">&#9888;&#65039;</div>
-                    <h3>14</h3>
-                    <p>Alertas Academicas</p>
+                <div class="kpi-card kpi-red">
+                    <div class="kpi-icon">⚠️</div>
+                    <div class="kpi-content">
+                        <h4>Alertas</h4>
+                        <h2 id="kpi-alertas">0</h2>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-orange">
+                    <div class="kpi-icon">🏫</div>
+                    <div class="kpi-content">
+                        <h4>Aulas Activas</h4>
+                        <h2 id="kpi-aulas">0</h2>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-teal">
+                    <div class="kpi-icon">👨‍🏫</div>
+                    <div class="kpi-content">
+                        <h4>Maestros</h4>
+                        <h2 id="kpi-maestros">0</h2>
+                    </div>
                 </div>
             </div>
+
+            <!-- FILA 2: GRÁFICAS -->
+            <div class="graficas-container">
+                <div class="grafica-panel">
+                    <h3 class="panel-title">Asistencia Últimos 6 Meses</h3>
+                    <canvas id="chartAsistenciaMensual"></canvas>
+                </div>
+                <div class="grafica-panel">
+                    <h3 class="panel-title">Promedio por Grado</h3>
+                    <canvas id="chartPromedioGrado"></canvas>
+                </div>
+                <div class="grafica-panel">
+                    <h3 class="panel-title">Distribución de Notas</h3>
+                    <canvas id="chartDistribucionNotas"></canvas>
+                </div>
+            </div>
+
+            <!-- FILA 3: ALERTAS ACADÉMICAS -->
             <div class="panel">
-                <h3 class="panel-title">Estudiantes registrados recientemente</h3>
+                <h3 class="panel-title">Estudiantes Que Necesitan Atención</h3>
                 <div class="table-wrap"><table class="data-table">
-                    <thead><tr><th>Nombre</th><th>Matricula</th><th>Grado</th><th>Seccion</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Grado</th>
+                            <th>Sección</th>
+                            <th>Promedio</th>
+                            <th>Asistencia</th>
+                            <th>Nivel</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaAlertas">
+                        <tr><td colspan="6" class="empty-row">Cargando...</td></tr>
+                    </tbody>
+                </table></div>
+            </div>
+
+            <!-- FILA 4: ESTUDIANTES RECIENTES -->
+            <div class="panel">
+                <h3 class="panel-title">Estudiantes Registrados Recientemente</h3>
+                <div class="table-wrap"><table class="data-table">
+                    <thead><tr><th>Nombre</th><th>Matrícula</th><th>Grado</th><th>Sección</th></tr></thead>
                     <tbody id="tablaRecientes">
                         <tr><td colspan="4" class="empty-row">No hay estudiantes registrados aun.</td></tr>
                     </tbody>
