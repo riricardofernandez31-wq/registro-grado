@@ -748,7 +748,8 @@ app.get("/api/exportar/boletin/pdf/:estudianteId", function(req, res) {
                 const sqlCalifs = `
                     SELECT c.*, m.nombre AS maestro_nombre
                     FROM calificaciones c
-                    LEFT JOIN asignaciones a ON a.asignatura = c.asignatura AND a.aula_id = ?
+                    LEFT JOIN asignaciones a ON a.asignatura COLLATE utf8mb4_unicode_ci = c.asignatura COLLATE utf8mb4_unicode_ci
+                        AND a.aula_id = ?
                     LEFT JOIN maestros m ON m.id = a.maestro_id
                     WHERE c.estudiante_id = ?
                     ORDER BY c.asignatura
