@@ -159,7 +159,10 @@ function mostrarSeccion(nombre) {
     };
     document.getElementById("sectionTitle").textContent = titulos[nombre] || "";
 
-    if (nombre === "inicio")         cargarDashboard();
+    if (nombre === "inicio") {
+        cargarDashboard();
+        setTimeout(initGraficas, 500);
+    }
     if (nombre === "estudiantes")    cargarTablaEstudiantes();
     if (nombre === "busqueda")       iniciarBusqueda();
     if (nombre === "calificaciones") cargarSelectEstudiantes();
@@ -202,21 +205,6 @@ async function cargarDashboard() {
             }
         } catch (err) { console.error("Error cargando stats:", err); }
 
-        // Cargar y dibujar las gráficas del dashboard
-        try {
-            const [asRes, pgRes, dnRes] = await Promise.all([
-                fetch(`${API}/dashboard/asistencia-mensual`),
-                fetch(`${API}/dashboard/promedios-por-grado`),
-                fetch(`${API}/dashboard/distribucion-notas`)
-            ]);
-            const [asData, pgData, dnData] = await Promise.all([asRes.json(), pgRes.json(), dnRes.json()]);
-            // Inicializar gráficas una vez la sección esté visible (evita canvas tamaño 0)
-            setTimeout(() => {
-                if (asRes.ok) renderAsistenciaChart(asData);
-                if (pgRes.ok) renderPromedioGradoChart(pgData);
-                if (dnRes.ok) renderDistribucionNotasChart(dnData);
-            }, 100);
-        } catch (err) { console.error("Error cargando gráficas:", err); }
         const tbody     = document.getElementById("tablaRecientes");
         const recientes = data.slice(0, 5);
         if (recientes.length === 0) {
@@ -232,56 +220,75 @@ async function cargarDashboard() {
 // =============================================
 // Charts
 // =============================================
-function renderAsistenciaChart(data) {
-    console.log("Iniciando gráficas: renderAsistenciaChart");
-    if (typeof Chart === 'undefined') { console.error('Chart.js no está cargado'); return; }
-    const ctx = document.getElementById('chartAsistencia');
-    if (!ctx) { console.error('Canvas chartAsistencia no encontrado'); return; }
-    const labels = data.map(d => d.mes);
-    const values = data.map(d => d.porcentaje ?? 0);
-    if (chartAsistencia) chartAsistencia.destroy();
+async function initGraficas() {
+    if (typeof Chart === 'undefined') {
+        console.error('Chart.js no está cargado');
+        return;
+    }
+
+    let asistenciaData = [];
+    let promedioData = [];
+    let distribucionData = { excelente: 0, bueno: 0, regular: 0, bajo: 0 };
+
     try {
-        chartAsistencia = new Chart(ctx, {
-            type: 'line',
-            data: { labels, datasets: [{ label: 'Asistencia (%)', data: values, borderColor: '#1565c0', backgroundColor: 'rgba(21,101,192,0.08)', fill: true }] },
-            options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, max:100}} }
+        const [asRes, pgRes, dnRes] = await Promise.all([
+            fetch(`${API}/dashboard/asistencia-mensual`),
+            fetch(`${API}/dashboard/promedios-por-grado`),
+            fetch(`${API}/dashboard/distribucion-notas`)
+        ]);
+
+        const asJson = asRes.ok ? await asRes.json() : [];
+        const pgJson = pgRes.ok ? await pgRes.json() : [];
+        const dnJson = dnRes.ok ? await dnRes.json() : {};
+
+        asistenciaData = Array.isArray(asJson) ? asJson.map(d => ({ label: d.mes || '', value: Number(d.porcentaje || 0) })) : [];
+        promedioData = Array.isArray(pgJson) ? pgJson.map(d => ({ label: d.grado || '', value: Number(d.promedio || 0) })) : [];
+        distribucionData = {
+            excelente: Number(dnJson.excelente || 0),
+            bueno: Number(dnJson.bueno || 0),
+            regular: Number(dnJson.regular || 0),
+            bajo: Number(dnJson.bajo || 0)
+        };
+    } catch (err) {
+        console.error('Error cargando datos de gráficas:', err);
+    }
+
+    const crearGrafica = (canvasId, type, labels, values, label) => {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) { console.error(`Canvas ${canvasId} no encontrado`); return; }
+        if (ctx._chartInstance) ctx._chartInstance.destroy();
+        const chart = new Chart(ctx, {
+            type,
+            data: { labels, datasets: [{ label: label || '', data: values, backgroundColor: type === 'doughnut' ? ['#2e7d32','#1565c0','#e65100','#c62828'] : '#6a1b9a' }] },
+            options: { responsive: true }
         });
-    } catch (err) { console.error('Error iniciando chartAsistencia:', err); }
+        ctx._chartInstance = chart;
+    };
+
+    crearGrafica(
+        'chartAsistencia',
+        'bar',
+        asistenciaData.map(d => d.label),
+        asistenciaData.map(d => d.value),
+        'Asistencia (%)'
+    );
+
+    crearGrafica(
+        'chartPromedioGrado',
+        'bar',
+        promedioData.map(d => d.label),
+        promedioData.map(d => d.value),
+        'Promedio'
+    );
+
+    crearGrafica(
+        'chartDistribucion',
+        'doughnut',
+        ['Excelente', 'Bueno', 'Regular', 'Bajo'],
+        [distribucionData.excelente, distribucionData.bueno, distribucionData.regular, distribucionData.bajo]
+    );
 }
 
-function renderPromedioGradoChart(data) {
-    console.log("Iniciando gráficas: renderPromedioGradoChart");
-    if (typeof Chart === 'undefined') { console.error('Chart.js no está cargado'); return; }
-    const ctx = document.getElementById('chartPromedioGrado');
-    if (!ctx) { console.error('Canvas chartPromedioGrado no encontrado'); return; }
-    const labels = data.map(d => d.grado);
-    const values = data.map(d => d.promedio ?? 0);
-    if (chartPromedioGrado) chartPromedioGrado.destroy();
-    try {
-        chartPromedioGrado = new Chart(ctx, {
-            type: 'bar',
-            data: { labels, datasets: [{ label: 'Promedio', data: values, backgroundColor: '#6a1b9a' }] },
-            options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
-        });
-    } catch (err) { console.error('Error iniciando chartPromedioGrado:', err); }
-}
-
-function renderDistribucionNotasChart(data) {
-    console.log("Iniciando gráficas: renderDistribucionNotasChart");
-    if (typeof Chart === 'undefined') { console.error('Chart.js no está cargado'); return; }
-    const ctx = document.getElementById('chartDistribucion');
-    if (!ctx) { console.error('Canvas chartDistribucion no encontrado'); return; }
-    const labels = ['Excelente','Bueno','Regular','Bajo'];
-    const values = [data.excelente||0, data.bueno||0, data.regular||0, data.bajo||0];
-    if (chartDistribucionNotas) chartDistribucionNotas.destroy();
-    try {
-        chartDistribucionNotas = new Chart(ctx, {
-            type: 'doughnut',
-            data: { labels, datasets: [{ data: values, backgroundColor: ['#2e7d32','#1565c0','#e65100','#c62828'] }] },
-            options: { responsive:true, plugins:{legend:{position:'bottom'}} }
-        });
-    } catch (err) { console.error('Error iniciando chartDistribucionNotas:', err); }
-}
 
 // =============================================
 //  ESTUDIANTES
