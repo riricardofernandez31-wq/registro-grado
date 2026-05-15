@@ -1109,14 +1109,28 @@ app.get("/api/dashboard/stats", function(req, res) {
         ];
 
         Promise.all(promises).then(([estudiantes, asistencia, promedio, alertas, aulas, maestros]) => {
-            res.json({
-                total_estudiantes: estudiantes,
-                asistencia_hoy: parseFloat(asistencia.toFixed(1)),
-                promedio_general: parseFloat(promedio.toFixed(2)),
-                alertas_academicas: alertas,
-                total_aulas: aulas,
-                total_maestros: maestros
-            });
+            try {
+                const asistenciaNum = Number(asistencia) || 0;
+                const promedioNum = Number(promedio) || 0;
+                res.json({
+                    total_estudiantes: estudiantes,
+                    asistencia_hoy: parseFloat(asistenciaNum.toFixed(1)),
+                    promedio_general: parseFloat(promedioNum.toFixed(2)),
+                    alertas_academicas: alertas,
+                    total_aulas: aulas,
+                    total_maestros: maestros
+                });
+            } catch (e) {
+                console.error('Error formateando stats:', e.message);
+                res.json({
+                    total_estudiantes: estudiantes,
+                    asistencia_hoy: 0,
+                    promedio_general: 0,
+                    alertas_academicas: alertas,
+                    total_aulas: aulas,
+                    total_maestros: maestros
+                });
+            }
         });
     });
 });
@@ -1171,14 +1185,15 @@ app.get("/api/dashboard/promedios-por-grado", function(req, res) {
         ORDER BY FIELD(e.grado, '1ro','2do','3ro','4to','5to','6to')
     `;
 
-    db.query(sql, function(err, rows) {
-        if (err || !rows.length) {
+        db.query(sql, function(err, rows) {
+        if (err || !rows || rows.length === 0) {
             return res.json(grados.map(g => ({ grado: g, promedio: 0 })));
         }
 
         const mapa = {};
         rows.forEach(r => {
-            mapa[r.grado] = r.promedio ? parseFloat(r.promedio.toFixed(2)) : 0;
+            const val = r.promedio !== null && r.promedio !== undefined ? Number(r.promedio) : 0;
+            mapa[r.grado] = isFinite(val) ? parseFloat(val.toFixed(2)) : 0;
         });
 
         const resultado = grados.map(g => ({
@@ -1221,9 +1236,9 @@ app.get("/api/dashboard/distribucion-notas", function(req, res) {
                 bajo: 0
             };
 
-            if (!err && rows.length) {
+            if (!err && rows && rows.length) {
                 rows.forEach(r => {
-                    result[r.categoria] = r.cantidad;
+                    result[r.categoria] = Number(r.cantidad) || 0;
                 });
             }
 
