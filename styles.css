@@ -162,6 +162,20 @@ body {
     min-height: 100vh;
 }
 
+.chart-card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.chart-card h3 {
+    font-size: 13px;
+    color: #5f6368;
+    margin-bottom: 12px;
+    font-weight: 500;
+}
+
 /* ===================== SIDEBAR ===================== */
 
 .sidebar {

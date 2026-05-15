@@ -260,7 +260,7 @@ async function initGraficas() {
         const chart = new Chart(ctx, {
             type,
             data: { labels, datasets: [{ label: label || '', data: values, backgroundColor: type === 'doughnut' ? ['#2e7d32','#1565c0','#e65100','#c62828'] : '#6a1b9a' }] },
-            options: { responsive: true }
+            options: { responsive: true, maintainAspectRatio: true }
         });
         ctx._chartInstance = chart;
     };
