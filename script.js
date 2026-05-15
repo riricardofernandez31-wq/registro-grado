@@ -210,9 +210,12 @@ async function cargarDashboard() {
                 fetch(`${API}/dashboard/distribucion-notas`)
             ]);
             const [asData, pgData, dnData] = await Promise.all([asRes.json(), pgRes.json(), dnRes.json()]);
-            if (asRes.ok) renderAsistenciaChart(asData);
-            if (pgRes.ok) renderPromedioGradoChart(pgData);
-            if (dnRes.ok) renderDistribucionNotasChart(dnData);
+            // Inicializar gráficas una vez la sección esté visible (evita canvas tamaño 0)
+            setTimeout(() => {
+                if (asRes.ok) renderAsistenciaChart(asData);
+                if (pgRes.ok) renderPromedioGradoChart(pgData);
+                if (dnRes.ok) renderDistribucionNotasChart(dnData);
+            }, 100);
         } catch (err) { console.error("Error cargando gráficas:", err); }
         const tbody     = document.getElementById("tablaRecientes");
         const recientes = data.slice(0, 5);
@@ -232,8 +235,8 @@ async function cargarDashboard() {
 function renderAsistenciaChart(data) {
     console.log("Iniciando gráficas: renderAsistenciaChart");
     if (typeof Chart === 'undefined') { console.error('Chart.js no está cargado'); return; }
-    const ctx = document.getElementById('chartAsistenciaMensual');
-    if (!ctx) { console.error('Canvas chartAsistenciaMensual no encontrado'); return; }
+    const ctx = document.getElementById('chartAsistencia');
+    if (!ctx) { console.error('Canvas chartAsistencia no encontrado'); return; }
     const labels = data.map(d => d.mes);
     const values = data.map(d => d.porcentaje ?? 0);
     if (chartAsistencia) chartAsistencia.destroy();
@@ -266,8 +269,8 @@ function renderPromedioGradoChart(data) {
 function renderDistribucionNotasChart(data) {
     console.log("Iniciando gráficas: renderDistribucionNotasChart");
     if (typeof Chart === 'undefined') { console.error('Chart.js no está cargado'); return; }
-    const ctx = document.getElementById('chartDistribucionNotas');
-    if (!ctx) { console.error('Canvas chartDistribucionNotas no encontrado'); return; }
+    const ctx = document.getElementById('chartDistribucion');
+    if (!ctx) { console.error('Canvas chartDistribucion no encontrado'); return; }
     const labels = ['Excelente','Bueno','Regular','Bajo'];
     const values = [data.excelente||0, data.bueno||0, data.regular||0, data.bajo||0];
     if (chartDistribucionNotas) chartDistribucionNotas.destroy();
