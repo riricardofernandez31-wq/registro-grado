@@ -10,6 +10,9 @@ let editandoEstudianteId = null;
 let aulasCache = [];
 let maestrosCache = [];
 let editandoAulaId = null;
+let chartAsistencia = null;
+let chartPromedioGrado = null;
+let chartDistribucionNotas = null;
 
 function parseFechaMySQL(fecha) {
     if (!fecha) return null;
@@ -177,19 +180,40 @@ async function cargarDashboard() {
             return;
         }
         estudiantesCache = data;
-        // Actualizar KPIs visibles en el dashboard
+        // Actualizar KPI de estudiantes rápido
         const kpiEst = document.getElementById("kpi-estudiantes");
         if (kpiEst) kpiEst.textContent = data.length;
-        const kpiAulas = document.getElementById("kpi-aulas");
-        if (kpiAulas) kpiAulas.textContent = aulasCache.length || 0;
-        const kpiMaestros = document.getElementById("kpi-maestros");
-        if (kpiMaestros) kpiMaestros.textContent = maestrosCache.length || 0;
-        const kpiAsistencia = document.getElementById("kpi-asistencia");
-        if (kpiAsistencia) kpiAsistencia.textContent = kpiAsistencia.textContent || 0;
-        const kpiPromedio = document.getElementById("kpi-promedio");
-        if (kpiPromedio) kpiPromedio.textContent = kpiPromedio.textContent || 0;
-        const kpiAlertas = document.getElementById("kpi-alertas");
-        if (kpiAlertas) kpiAlertas.textContent = kpiAlertas.textContent || 0;
+
+        // Solicitar estadísticas completas al servidor para poblar KPIs y gráficas
+        try {
+            const sres = await fetch(`${API}/dashboard/stats`);
+            const stats = await sres.json();
+            if (sres.ok) {
+                const kpiAulas = document.getElementById("kpi-aulas");
+                if (kpiAulas) kpiAulas.textContent = stats.total_aulas || 0;
+                const kpiMaestros = document.getElementById("kpi-maestros");
+                if (kpiMaestros) kpiMaestros.textContent = stats.total_maestros || 0;
+                const kpiAsistencia = document.getElementById("kpi-asistencia");
+                if (kpiAsistencia) kpiAsistencia.textContent = typeof stats.asistencia_hoy === 'number' ? stats.asistencia_hoy : 0;
+                const kpiPromedio = document.getElementById("kpi-promedio");
+                if (kpiPromedio) kpiPromedio.textContent = typeof stats.promedio_general === 'number' ? stats.promedio_general : 0;
+                const kpiAlertas = document.getElementById("kpi-alertas");
+                if (kpiAlertas) kpiAlertas.textContent = stats.alertas_academicas || 0;
+            }
+        } catch (err) { console.error("Error cargando stats:", err); }
+
+        // Cargar y dibujar las gráficas del dashboard
+        try {
+            const [asRes, pgRes, dnRes] = await Promise.all([
+                fetch(`${API}/dashboard/asistencia-mensual`),
+                fetch(`${API}/dashboard/promedios-por-grado`),
+                fetch(`${API}/dashboard/distribucion-notas`)
+            ]);
+            const [asData, pgData, dnData] = await Promise.all([asRes.json(), pgRes.json(), dnRes.json()]);
+            if (asRes.ok) renderAsistenciaChart(asData);
+            if (pgRes.ok) renderPromedioGradoChart(pgData);
+            if (dnRes.ok) renderDistribucionNotasChart(dnData);
+        } catch (err) { console.error("Error cargando gráficas:", err); }
         const tbody     = document.getElementById("tablaRecientes");
         const recientes = data.slice(0, 5);
         if (recientes.length === 0) {
@@ -200,6 +224,48 @@ async function cargarDashboard() {
             `<tr><td>${e.nombre}</td><td>${e.matricula}</td><td>${e.grado}</td><td>${e.seccion||"—"}</td></tr>`
         ).join("");
     } catch (err) { console.error("Error dashboard:", err); }
+}
+
+// =============================================
+// Charts
+// =============================================
+function renderAsistenciaChart(data) {
+    const ctx = document.getElementById('chartAsistenciaMensual');
+    if (!ctx) return;
+    const labels = data.map(d => d.mes);
+    const values = data.map(d => d.porcentaje ?? 0);
+    if (chartAsistencia) chartAsistencia.destroy();
+    chartAsistencia = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets: [{ label: 'Asistencia (%)', data: values, borderColor: '#1565c0', backgroundColor: 'rgba(21,101,192,0.08)', fill: true }] },
+        options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, max:100}} }
+    });
+}
+
+function renderPromedioGradoChart(data) {
+    const ctx = document.getElementById('chartPromedioGrado');
+    if (!ctx) return;
+    const labels = data.map(d => d.grado);
+    const values = data.map(d => d.promedio ?? 0);
+    if (chartPromedioGrado) chartPromedioGrado.destroy();
+    chartPromedioGrado = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Promedio', data: values, backgroundColor: '#6a1b9a' }] },
+        options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+    });
+}
+
+function renderDistribucionNotasChart(data) {
+    const ctx = document.getElementById('chartDistribucionNotas');
+    if (!ctx) return;
+    const labels = ['Excelente','Bueno','Regular','Bajo'];
+    const values = [data.excelente||0, data.bueno||0, data.regular||0, data.bajo||0];
+    if (chartDistribucionNotas) chartDistribucionNotas.destroy();
+    chartDistribucionNotas = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: values, backgroundColor: ['#2e7d32','#1565c0','#e65100','#c62828'] }] },
+        options: { responsive:true, plugins:{legend:{position:'bottom'}} }
+    });
 }
 
 // =============================================

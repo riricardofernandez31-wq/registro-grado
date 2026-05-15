@@ -739,16 +739,19 @@ app.get("/api/exportar/boletin/pdf/:estudianteId", function(req, res) {
                     return res.status(404).json({ error: "Estudiante no encontrado." });
                 const est = estudiantes[0];
 
-                // Obtener calificaciones del estudiante
+                // Obtener calificaciones del estudiante (consulta robusta: no asumir anio_escolar obligatorio)
                 db.query(
                     `SELECT c.*, m.nombre as maestro_nombre
                      FROM calificaciones c
-                     LEFT JOIN asignaciones a ON c.asignacion_id = a.id
-                     LEFT JOIN maestros m ON a.maestro_id = m.id
-                     WHERE c.estudiante_id = ? AND c.anio_escolar = ?
+                     LEFT JOIN asignaciones a ON a.id = c.asignacion_id
+                     LEFT JOIN maestros m ON m.id = a.maestro_id
+                     WHERE c.estudiante_id = ?
                      ORDER BY c.asignatura`,
-                    [estudianteId, cfg.anio_escolar], function(err2, calificaciones) {
-                        if (err2) return res.status(500).json({ error: "Error al obtener calificaciones." });
+                    [estudianteId], function(err2, calificaciones) {
+                        if (err2) {
+                            console.error("Error consulta calificaciones:", err2.message);
+                            return res.status(500).json({ error: "Error al obtener calificaciones.", detalle: err2.message });
+                        }
 
                         // Obtener resumen de asistencia del período
                         db.query(
