@@ -740,18 +740,23 @@ app.get("/api/exportar/boletin/pdf/:estudianteId", function(req, res) {
                 const est = estudiantes[0];
 
                 // Obtener calificaciones del estudiante (consulta robusta: no asumir anio_escolar obligatorio)
-                db.query(
-                    `SELECT c.*, m.nombre as maestro_nombre
-                     FROM calificaciones c
-                     LEFT JOIN asignaciones a ON a.id = c.asignacion_id
-                     LEFT JOIN maestros m ON m.id = a.maestro_id
-                     WHERE c.estudiante_id = ?
-                     ORDER BY c.asignatura`,
-                    [estudianteId], function(err2, calificaciones) {
-                        if (err2) {
-                            console.error("Error consulta calificaciones:", err2.message);
-                            return res.status(500).json({ error: "Error al obtener calificaciones.", detalle: err2.message });
-                        }
+                // Obtener calificaciones del estudiante. No dependemos de la columna asignacion_id
+                // (algunas instalaciones antiguas pueden no tenerla). En su lugar, intentamos
+                // resolver el nombre del maestro por asignatura + aula mediante subconsulta.
+                const sqlCalifs = `
+                    SELECT c.*,
+                        (SELECT m.nombre FROM asignaciones a JOIN maestros m ON m.id = a.maestro_id
+                         WHERE a.asignatura = c.asignatura AND a.aula_id = ? LIMIT 1) AS maestro_nombre
+                    FROM calificaciones c
+                    WHERE c.estudiante_id = ?
+                    ORDER BY c.asignatura
+                `;
+
+                db.query(sqlCalifs, [est.aula_id || null, estudianteId], function(err2, calificaciones) {
+                    if (err2) {
+                        console.error("Error consulta calificaciones (boletin):", err2.message);
+                        return res.status(500).json({ error: "Error al obtener calificaciones.", detalle: err2.message });
+                    }
 
                         // Obtener resumen de asistencia del período
                         db.query(
@@ -1356,4 +1361,12 @@ app.get("/api/db-check", function(req, res) {
 // =============================================
 app.listen(PORT, function() {
     console.log("Servidor corriendo en http://localhost:" + PORT);
+});
+
+// Endpoint de diagnóstico: Describe calificaciones (útil para verificar esquema en producción)
+app.get("/api/debug/calificaciones/describe", function(req, res) {
+    db.query("DESCRIBE calificaciones", function(err, rows) {
+        if (err) return res.status(500).json({ error: "Error al describir calificaciones.", detalle: err.message });
+        res.json(rows);
+    });
 });
