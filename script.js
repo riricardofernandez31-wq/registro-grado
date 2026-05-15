@@ -230,42 +230,54 @@ async function cargarDashboard() {
 // Charts
 // =============================================
 function renderAsistenciaChart(data) {
+    console.log("Iniciando gráficas: renderAsistenciaChart");
+    if (typeof Chart === 'undefined') { console.error('Chart.js no está cargado'); return; }
     const ctx = document.getElementById('chartAsistenciaMensual');
-    if (!ctx) return;
+    if (!ctx) { console.error('Canvas chartAsistenciaMensual no encontrado'); return; }
     const labels = data.map(d => d.mes);
     const values = data.map(d => d.porcentaje ?? 0);
     if (chartAsistencia) chartAsistencia.destroy();
-    chartAsistencia = new Chart(ctx, {
-        type: 'line',
-        data: { labels, datasets: [{ label: 'Asistencia (%)', data: values, borderColor: '#1565c0', backgroundColor: 'rgba(21,101,192,0.08)', fill: true }] },
-        options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, max:100}} }
-    });
+    try {
+        chartAsistencia = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets: [{ label: 'Asistencia (%)', data: values, borderColor: '#1565c0', backgroundColor: 'rgba(21,101,192,0.08)', fill: true }] },
+            options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, max:100}} }
+        });
+    } catch (err) { console.error('Error iniciando chartAsistencia:', err); }
 }
 
 function renderPromedioGradoChart(data) {
+    console.log("Iniciando gráficas: renderPromedioGradoChart");
+    if (typeof Chart === 'undefined') { console.error('Chart.js no está cargado'); return; }
     const ctx = document.getElementById('chartPromedioGrado');
-    if (!ctx) return;
+    if (!ctx) { console.error('Canvas chartPromedioGrado no encontrado'); return; }
     const labels = data.map(d => d.grado);
     const values = data.map(d => d.promedio ?? 0);
     if (chartPromedioGrado) chartPromedioGrado.destroy();
-    chartPromedioGrado = new Chart(ctx, {
-        type: 'bar',
-        data: { labels, datasets: [{ label: 'Promedio', data: values, backgroundColor: '#6a1b9a' }] },
-        options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
-    });
+    try {
+        chartPromedioGrado = new Chart(ctx, {
+            type: 'bar',
+            data: { labels, datasets: [{ label: 'Promedio', data: values, backgroundColor: '#6a1b9a' }] },
+            options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+        });
+    } catch (err) { console.error('Error iniciando chartPromedioGrado:', err); }
 }
 
 function renderDistribucionNotasChart(data) {
+    console.log("Iniciando gráficas: renderDistribucionNotasChart");
+    if (typeof Chart === 'undefined') { console.error('Chart.js no está cargado'); return; }
     const ctx = document.getElementById('chartDistribucionNotas');
-    if (!ctx) return;
+    if (!ctx) { console.error('Canvas chartDistribucionNotas no encontrado'); return; }
     const labels = ['Excelente','Bueno','Regular','Bajo'];
     const values = [data.excelente||0, data.bueno||0, data.regular||0, data.bajo||0];
     if (chartDistribucionNotas) chartDistribucionNotas.destroy();
-    chartDistribucionNotas = new Chart(ctx, {
-        type: 'doughnut',
-        data: { labels, datasets: [{ data: values, backgroundColor: ['#2e7d32','#1565c0','#e65100','#c62828'] }] },
-        options: { responsive:true, plugins:{legend:{position:'bottom'}} }
-    });
+    try {
+        chartDistribucionNotas = new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels, datasets: [{ data: values, backgroundColor: ['#2e7d32','#1565c0','#e65100','#c62828'] }] },
+            options: { responsive:true, plugins:{legend:{position:'bottom'}} }
+        });
+    } catch (err) { console.error('Error iniciando chartDistribucionNotas:', err); }
 }
 
 // =============================================
