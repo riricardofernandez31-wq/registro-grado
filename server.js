@@ -743,18 +743,20 @@ app.get("/api/exportar/boletin/pdf/:estudianteId", function(req, res) {
                 // Obtener calificaciones del estudiante. No dependemos de la columna asignacion_id
                 // (algunas instalaciones antiguas pueden no tenerla). En su lugar, intentamos
                 // resolver el nombre del maestro por asignatura + aula mediante subconsulta.
+                // Prefer JOIN with fallback: link calificaciones -> asignaciones (por asignatura + aula) -> maestros
+                // Si no existe asignacion para esa asignatura/aula, maestro_nombre quedará NULL.
                 const sqlCalifs = `
-                    SELECT c.*,
-                        (SELECT m.nombre FROM asignaciones a JOIN maestros m ON m.id = a.maestro_id
-                         WHERE a.asignatura = c.asignatura AND a.aula_id = ? LIMIT 1) AS maestro_nombre
+                    SELECT c.*, m.nombre AS maestro_nombre
                     FROM calificaciones c
+                    LEFT JOIN asignaciones a ON a.asignatura = c.asignatura AND a.aula_id = ?
+                    LEFT JOIN maestros m ON m.id = a.maestro_id
                     WHERE c.estudiante_id = ?
                     ORDER BY c.asignatura
                 `;
 
                 db.query(sqlCalifs, [est.aula_id || null, estudianteId], function(err2, calificaciones) {
                     if (err2) {
-                        console.error("Error consulta calificaciones (boletin):", err2.message);
+                        console.error("Error consulta calificaciones (boletin - join):", err2.message);
                         return res.status(500).json({ error: "Error al obtener calificaciones.", detalle: err2.message });
                     }
 
