@@ -292,7 +292,9 @@
                     <div class="field"><label>Competencia</label><input type="text" id="cal-competencia" placeholder="Ej: Comunicativa y Cultural"></div>
                     <div class="field"><label>Parcial 1 (0-100)</label><input type="number" id="cal-p1" min="0" max="100" placeholder="Ej: 85"></div>
                     <div class="field"><label>Parcial 2 (0-100)</label><input type="number" id="cal-p2" min="0" max="100" placeholder="Ej: 90"></div>
-                    <div class="field"><label>Calificacion Final</label><input type="number" id="cal-final" min="0" max="100" placeholder="Promedio automatico"></div>
+                    <div class="field"><label>Parcial 3 (0-100)</label><input type="number" id="cal-p3" min="0" max="100" placeholder="Ej: 75"></div>
+                    <div class="field"><label>Parcial 4 (0-100)</label><input type="number" id="cal-p4" min="0" max="100" placeholder="Ej: 88"></div>
+                    <div class="field"><label>Promedio</label><input type="number" id="cal-final" min="0" max="100" placeholder="Promedio automático" readonly></div>
                     <div class="field field-full"><label>Observaciones Academicas</label><textarea id="cal-obs" placeholder="Notas sobre el desempeno..."></textarea></div>
                     <div class="field field-full form-actions"><button type="submit" class="btn-primary">Guardar Calificacion</button></div>
                 </form>
@@ -301,8 +303,8 @@
             <div class="panel" style="margin-top:24px">
                 <h3 class="panel-title">Registro de Calificaciones</h3>
                 <div class="table-wrap"><table class="data-table">
-                    <thead><tr><th>Estudiante</th><th>Asignatura</th><th>Parcial 1</th><th>Parcial 2</th><th>Final</th></tr></thead>
-                    <tbody id="tablaCalificaciones"><tr><td colspan="5" class="empty-row">No hay calificaciones registradas.</td></tr></tbody>
+                    <thead><tr><th>Estudiante</th><th>Asignatura</th><th>Nota 1</th><th>Nota 2</th><th>Nota 3</th><th>Nota 4</th><th>Promedio</th></tr></thead>
+                    <tbody id="tablaCalificaciones"><tr><td colspan="7" class="empty-row">No hay calificaciones registradas.</td></tr></tbody>
                 </table></div>
             </div>
         </section>

@@ -418,12 +418,13 @@ async function cargarSelectEstudiantes() {
     } catch (err) { console.error("Error select:", err); }
 }
 
-["cal-p1","cal-p2"].forEach(function(id) {
+["cal-p1","cal-p2","cal-p3","cal-p4"].forEach(function(id) {
     document.getElementById(id).addEventListener("input", function() {
         const p1 = parseFloat(document.getElementById("cal-p1").value) || 0;
         const p2 = parseFloat(document.getElementById("cal-p2").value) || 0;
-        if (p1 > 0 || p2 > 0)
-            document.getElementById("cal-final").value = ((p1+p2)/2).toFixed(1);
+        const p3 = parseFloat(document.getElementById("cal-p3").value) || 0;
+        const p4 = parseFloat(document.getElementById("cal-p4").value) || 0;
+        document.getElementById("cal-final").value = ((p1 + p2 + p3 + p4) / 4).toFixed(1);
     });
 });
 
@@ -433,9 +434,10 @@ document.getElementById("formCalificaciones").addEventListener("submit", async f
         estudiante_id: document.getElementById("cal-estudiante").value,
         asignatura:    document.getElementById("cal-asignatura").value,
         competencia:   document.getElementById("cal-competencia").value.trim(),
-        parcial_1:     document.getElementById("cal-p1").value || null,
-        parcial_2:     document.getElementById("cal-p2").value || null,
-        final:         document.getElementById("cal-final").value || null,
+        nota1:         document.getElementById("cal-p1").value || null,
+        nota2:         document.getElementById("cal-p2").value || null,
+        nota3:         document.getElementById("cal-p3").value || null,
+        nota4:         document.getElementById("cal-p4").value || null,
         observaciones: document.getElementById("cal-obs").value.trim()
     };
     try {
@@ -458,11 +460,11 @@ async function cargarTablaCalificaciones() {
         const data = await res.json();
         const tbody = document.getElementById("tablaCalificaciones");
         if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="empty-row">No hay calificaciones registradas.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="empty-row">No hay calificaciones registradas.</td></tr>';
             return;
         }
         tbody.innerHTML = data.map(c =>
-            `<tr><td>${c.nombre_estudiante}</td><td>${c.asignatura}</td><td>${c.parcial_1??'—'}</td><td>${c.parcial_2??'—'}</td><td><strong>${c.final??'—'}</strong></td></tr>`
+            `<tr><td>${c.nombre_estudiante}</td><td>${c.asignatura}</td><td>${c.nota1 ?? '—'}</td><td>${c.nota2 ?? '—'}</td><td>${c.nota3 ?? '—'}</td><td>${c.nota4 ?? '—'}</td><td><strong>${c.promedio ?? '—'}</strong></td></tr>`
         ).join("");
     } catch (err) { console.error("Error calificaciones:", err); }
 }
@@ -680,9 +682,9 @@ async function generarReporte(tipo) {
             const res = await fetch(`${API}/calificaciones`);
             data = await res.json();
             titulo = "Reporte de Calificaciones";
-            columnas = ["Estudiante","Asignatura","Parcial 1","Parcial 2","Final"];
+            columnas = ["Estudiante","Asignatura","Nota 1","Nota 2","Nota 3","Nota 4","Promedio"];
             filas = data.map(c =>
-                `<tr><td>${c.nombre_estudiante}</td><td>${c.asignatura}</td><td>${c.parcial_1??'—'}</td><td>${c.parcial_2??'—'}</td><td><strong>${c.final??'—'}</strong></td></tr>`
+                `<tr><td>${c.nombre_estudiante}</td><td>${c.asignatura}</td><td>${c.nota1 ?? '—'}</td><td>${c.nota2 ?? '—'}</td><td>${c.nota3 ?? '—'}</td><td>${c.nota4 ?? '—'}</td><td><strong>${c.promedio ?? '—'}</strong></td></tr>`
             ).join("");
         } else if (tipo === "asistencia") {
             const res = await fetch(`${API}/asistencia`);
@@ -938,15 +940,16 @@ async function mostrarFichaEstudiante(id) {
         const califsHTML = califs.length === 0
             ? '<p class="empty-row">Sin calificaciones registradas.</p>'
             : '<div style="overflow-x:auto"><table class="data-table">'
-              + '<thead><tr><th>Asignatura</th><th>Parcial 1</th><th>Parcial 2</th><th>Final</th><th>Estado</th></tr></thead><tbody>'
+              + '<thead><tr><th>Asignatura</th><th>Nota 1</th><th>Nota 2</th><th>Nota 3</th><th>Nota 4</th><th>Promedio</th><th>Estado</th></tr></thead><tbody>'
               + califs.map(function(c) {
-                    const fin    = parseFloat(c.final);
-                    const estado = isNaN(fin) ? "—" : fin >= 70
+                    const prom    = parseFloat(c.promedio);
+                    const estado = isNaN(prom) ? "—" : prom >= 70
                         ? '<span style="color:#2e7d32;font-weight:700">Aprobado</span>'
                         : '<span style="color:#c62828;font-weight:700">Pendiente</span>';
-                    return '<tr><td><strong>' + c.asignatura + '</strong></td><td>' + (c.parcial_1 != null ? c.parcial_1 : "—")
-                        + '</td><td>' + (c.parcial_2 != null ? c.parcial_2 : "—")
-                        + '</td><td><strong>' + (c.final != null ? c.final : "—") + '</strong></td><td>' + estado + '</td></tr>';
+                    return '<tr><td><strong>' + c.asignatura + '</strong></td><td>' + (c.nota1 != null ? c.nota1 : "—")
+                        + '</td><td>' + (c.nota2 != null ? c.nota2 : "—")
+                        + '</td><td>' + (c.nota3 != null ? c.nota3 : "—")
+                        + '</td><td>' + (c.nota4 != null ? c.nota4 : "—") + '</td><td><strong>' + (c.promedio != null ? c.promedio : "—") + '</strong></td><td>' + estado + '</td></tr>';
                 }).join("")
               + '</tbody></table></div>';
 
@@ -1104,15 +1107,14 @@ async function agregarParticipacion(estudianteId) {
 
 async function cargarMaestrosDropdown() {
     try {
-        // Request only maestros vinculados a un usuario con rol 'docente'
-        const res = await fetch(`${API}/maestros/docentes`);
+        const res = await fetch(`${API}/maestros`);
         const data = await res.json();
         if (!res.ok) return;
         maestrosCache = data;
         const select = document.getElementById("aula-maestro-guia");
         if (!select) return;
         select.innerHTML = '<option value="">-- Sin asignar --</option>' +
-            data.map(m => `<option value="${m.id}">${m.nombre}${m.especialidad ? ' (' + m.especialidad + ')' : ''}</option>`).join("");
+            data.map(m => `<option value="${m.id}">${m.nombre}</option>`).join("");
     } catch (err) { console.error("Error cargando maestros:", err); }
 }
 

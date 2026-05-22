@@ -138,10 +138,10 @@ function initDB() {
             asignacion_id          INT                     DEFAULT NULL,
             asignatura             VARCHAR(100)   NOT NULL,
             competencia            VARCHAR(200)            DEFAULT NULL,
-            nota1                  DECIMAL(5,2)            DEFAULT NULL,
-            nota2                  DECIMAL(5,2)            DEFAULT NULL,
-            nota3                  DECIMAL(5,2)            DEFAULT NULL,
-            nota4                  DECIMAL(5,2)            DEFAULT NULL,
+            nota1                  DECIMAL(5,2)            DEFAULT 0,
+            nota2                  DECIMAL(5,2)            DEFAULT 0,
+            nota3                  DECIMAL(5,2)            DEFAULT 0,
+            nota4                  DECIMAL(5,2)            DEFAULT 0,
             promedio               DECIMAL(5,2)            DEFAULT NULL,
             promedio_redondeado    INT                     DEFAULT NULL,
             observaciones          TEXT                    DEFAULT NULL,
@@ -210,12 +210,12 @@ function initDB() {
         `ALTER TABLE participaciones ADD COLUMN registrado_por INT DEFAULT NULL`,
         `ALTER TABLE participaciones ADD COLUMN descripcion TEXT DEFAULT NULL`,
         `ALTER TABLE participaciones ADD CONSTRAINT fk_part_usuario FOREIGN KEY (registrado_por) REFERENCES usuarios(id) ON DELETE SET NULL ON UPDATE CASCADE`,
-        `ALTER TABLE calificaciones ADD COLUMN nota1 DECIMAL(5,2) DEFAULT NULL`,
-        `ALTER TABLE calificaciones ADD COLUMN nota2 DECIMAL(5,2) DEFAULT NULL`,
-        `ALTER TABLE calificaciones ADD COLUMN nota3 DECIMAL(5,2) DEFAULT NULL`,
-        `ALTER TABLE calificaciones ADD COLUMN nota4 DECIMAL(5,2) DEFAULT NULL`,
-        `ALTER TABLE calificaciones ADD COLUMN promedio DECIMAL(5,2) DEFAULT NULL`,
-        `ALTER TABLE calificaciones ADD COLUMN promedio_redondeado INT DEFAULT NULL`
+        `ALTER TABLE calificaciones ADD COLUMN IF NOT EXISTS nota1 DECIMAL(5,2) DEFAULT 0 AFTER competencia`,
+        `ALTER TABLE calificaciones ADD COLUMN IF NOT EXISTS nota2 DECIMAL(5,2) DEFAULT 0 AFTER nota1`,
+        `ALTER TABLE calificaciones ADD COLUMN IF NOT EXISTS nota3 DECIMAL(5,2) DEFAULT 0 AFTER nota2`,
+        `ALTER TABLE calificaciones ADD COLUMN IF NOT EXISTS nota4 DECIMAL(5,2) DEFAULT 0 AFTER nota3`,
+        `ALTER TABLE calificaciones ADD COLUMN IF NOT EXISTS promedio DECIMAL(5,2) DEFAULT NULL`,
+        `ALTER TABLE calificaciones ADD COLUMN IF NOT EXISTS promedio_redondeado INT DEFAULT NULL`
     ];
 
     const datos = [
@@ -409,19 +409,17 @@ app.post("/api/calificaciones", function(req, res) {
     if (!estudiante_id || !asignatura)
         return res.status(400).json({ error: "Estudiante y asignatura son obligatorios." });
 
-    // Parse numeric notes
-    const n1 = nota1 != null && nota1 !== '' ? Number(nota1) : null;
-    const n2 = nota2 != null && nota2 !== '' ? Number(nota2) : null;
-    const n3 = nota3 != null && nota3 !== '' ? Number(nota3) : null;
-    const n4 = nota4 != null && nota4 !== '' ? Number(nota4) : null;
-    const notas = [n1, n2, n3, n4].filter(n => n !== null && !isNaN(n));
-    let promedio = null;
-    let promedio_redondeado = null;
-    if (notas.length > 0) {
-        const suma = notas.reduce((a,b) => a + b, 0);
-        promedio = Number((suma / notas.length).toFixed(2));
-        promedio_redondeado = Math.round(promedio);
-    }
+    // Parse numeric notes and calculate average over four valores.
+    const parseNota = (value) => {
+        const numero = value != null && value !== '' && !isNaN(Number(value)) ? Number(value) : 0;
+        return Math.min(100, Math.max(0, numero));
+    };
+    const n1 = parseNota(nota1);
+    const n2 = parseNota(nota2);
+    const n3 = parseNota(nota3);
+    const n4 = parseNota(nota4);
+    const promedio = Number(((n1 + n2 + n3 + n4) / 4).toFixed(2));
+    const promedio_redondeado = Math.round(promedio);
 
     db.query(
         "INSERT INTO calificaciones (estudiante_id, asignacion_id, asignatura, competencia, nota1, nota2, nota3, nota4, promedio, promedio_redondeado, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -495,9 +493,9 @@ app.delete("/api/usuarios/:id", function(req, res) {
 //  AULAS
 // =============================================
 app.get("/api/aulas", function(req, res) {
-    const sql = `SELECT a.*, m.nombre AS nombre_maestro, m.especialidad,
+    const sql = `SELECT a.*, u.nombre AS nombre_maestro, u.rol AS maestro_rol,
                  (SELECT COUNT(*) FROM estudiantes WHERE aula_id = a.id AND activo = 1) AS estudiantes_count
-                 FROM aulas a LEFT JOIN maestros m ON a.maestro_guia_id = m.id
+                 FROM aulas a LEFT JOIN usuarios u ON a.maestro_guia_id = u.id
                  ORDER BY a.grado, a.seccion`;
     db.query(sql, function(err, results) {
         if (err) return res.status(500).json({ error: "Error al obtener aulas." });
@@ -549,7 +547,8 @@ app.delete("/api/aulas/:id", function(req, res) {
 //  MAESTROS
 // =============================================
 app.get("/api/maestros", function(req, res) {
-    db.query("SELECT * FROM maestros WHERE activo = 1 ORDER BY nombre", function(err, results) {
+    const sql = `SELECT id, nombre FROM usuarios WHERE activo = 1 AND rol IN ('docente','admin','director','coordinador') ORDER BY nombre`;
+    db.query(sql, function(err, results) {
         if (err) return res.status(500).json({ error: "Error al obtener maestros." });
         res.json(results);
     });
@@ -898,104 +897,106 @@ app.get("/api/exportar/boletin/pdf/:estudianteId", function(req, res) {
                                 doc.fontSize(14).fillColor("#0d2352").text("BOLETÍN ESTUDIANTIL", { align: "center" });
                                 doc.moveDown(0.5);
 
-                                // Datos del estudiante
-                                const fieldLeft = 50;
-                                const fieldRight = doc.page.width / 2 + 20;
-                                const lineHeight = 18;
-                                let currentY = doc.y;
+                                // Datos del estudiante y del centro en formato de dos columnas
+                                const infoTop = doc.y;
+                                doc.lineWidth(1).strokeColor("#0d2352").rect(40, infoTop, 60, 60).stroke();
+                                doc.fontSize(8).fillColor("#0d2352").text("ESCUDO\nMINERD", 40, infoTop + 16, { width: 60, align: "center" });
 
-                                doc.fontSize(9).fillColor("#333");
-                                doc.text(`Nombre: ${est.nombre}`, fieldLeft, currentY);
-                                doc.text(`Matrícula: ${est.matricula}`, fieldRight, currentY);
+                                const leftCol = 110;
+                                const rightCol = doc.page.width / 2 + 20;
+                                const infoLineGap = 16;
 
-                                currentY += lineHeight;
-                                doc.text(`Grado: ${est.grado}`, fieldLeft, currentY);
-                                doc.text(`Sección: ${est.seccion}`, fieldRight, currentY);
+                                doc.font("Helvetica-Bold").fontSize(10).fillColor("#0d2352").text("DATOS DEL ESTUDIANTE", leftCol, infoTop);
+                                doc.font("Helvetica").fontSize(9).fillColor("#333");
+                                doc.text(`Nombre: ${est.nombre}`, leftCol, infoTop + infoLineGap);
+                                doc.text(`Matrícula: ${est.matricula}`, leftCol, infoTop + infoLineGap * 2);
+                                doc.text(`Grado y Sección: ${est.grado}${est.seccion ? ' - ' + est.seccion : ''}`, leftCol, infoTop + infoLineGap * 3);
+                                doc.text(`Tutor: ${est.tutor || "N/A"}`, leftCol, infoTop + infoLineGap * 4);
+                                doc.text(`Teléfono: ${est.telefono || "N/A"}`, leftCol, infoTop + infoLineGap * 5);
 
-                                currentY += lineHeight;
-                                doc.text(`Tutor: ${est.tutor || "N/A"}`, fieldLeft, currentY);
-                                doc.text(`Teléfono: ${est.telefono || "N/A"}`, fieldRight, currentY);
+                                doc.font("Helvetica-Bold").fontSize(10).fillColor("#0d2352").text("DATOS DEL CENTRO", rightCol, infoTop);
+                                doc.font("Helvetica").fontSize(9).fillColor("#333");
+                                doc.text(`Centro: ${cfg.nombre_centro || "Centro Educativo"}`, rightCol, infoTop + infoLineGap);
+                                doc.text(`Año Escolar: ${cfg.anio_escolar}`, rightCol, infoTop + infoLineGap * 2);
+                                doc.text(`Director(a): ${cfg.director || "____________________"}`, rightCol, infoTop + infoLineGap * 3);
+                                doc.text(`Distrito: ${cfg.distrito || "N/D"}`, rightCol, infoTop + infoLineGap * 4);
+                                doc.text(`Regional: ${cfg.regional || "N/D"}`, rightCol, infoTop + infoLineGap * 5);
 
-                                doc.moveDown(1.5);
+                                doc.moveDown(5);
 
-                                // Tabla de calificaciones
-                                doc.fontSize(10).fillColor("#0d2352").text("CALIFICACIONES POR ASIGNATURA", { underline: true });
+                                // Tabla de Calificaciones con formato MINERD
+                                doc.fontSize(10).fillColor("#0d2352").text("CALIFICACIONES", { underline: true });
                                 doc.moveDown(0.3);
 
                                 const tableTop = doc.y;
-                                const colWidths = [150, 60, 60, 60, 60];
-                                const headers = ["Asignatura", "Parc. 1", "Parc. 2", "Final", "Maestro"];
+                                const colWidths = [140, 55, 55, 55, 55, 60, 85];
+                                const headers = ["ASIGNATURA", "1RA NOTA", "2DA NOTA", "3RA NOTA", "4TA NOTA", "PROMEDIO", "CONDICIÓN"];
 
-                                // Encabezado de tabla
                                 let tableX = 40;
-                                doc.fontSize(9).fillColor("#fff");
-                                doc.rect(40, tableTop, doc.page.width - 80, 18).fill("#0d2352");
+                                doc.fontSize(9).fillColor("#ffffff");
+                                doc.rect(40, tableTop, doc.page.width - 80, 20).fill("#0d2352");
                                 headers.forEach((h, i) => {
-                                    doc.text(h, tableX + 3, tableTop + 3, { width: colWidths[i] - 6 });
+                                    doc.text(h, tableX + 3, tableTop + 5, { width: colWidths[i] - 6, align: i > 0 ? "center" : "left" });
                                     tableX += colWidths[i];
                                 });
 
-                                // Filas de calificaciones
-                                let currentRow = tableTop + 20;
+                                let currentRow = tableTop + 22;
                                 calificaciones.forEach((calif, idx) => {
-                                    const bgColor = idx % 2 === 0 ? "#f4f7ff" : "#ffffff";
+                                    const bg = idx % 2 === 0 ? "#f4f7ff" : "#ffffff";
                                     tableX = 40;
+                                    doc.rect(40, currentRow, doc.page.width - 80, 18).fill(bg);
+                                    doc.fillColor("#333").fontSize(8);
 
-                                    doc.rect(40, currentRow, doc.page.width - 80, 16).fill(bgColor);
-                                    doc.fontSize(8).fillColor("#333");
+                                    const nota1 = calif.nota1 != null ? Number(calif.nota1).toFixed(2) : "-";
+                                    const nota2 = calif.nota2 != null ? Number(calif.nota2).toFixed(2) : "-";
+                                    const nota3 = calif.nota3 != null ? Number(calif.nota3).toFixed(2) : "-";
+                                    const nota4 = calif.nota4 != null ? Number(calif.nota4).toFixed(2) : "-";
+                                    const promedioFinal = calif.promedio != null ? Number(calif.promedio).toFixed(2) : "-";
+                                    const condicion = calif.promedio != null && !isNaN(Number(calif.promedio))
+                                        ? (Number(calif.promedio) >= 70 ? "APROBADO" : "PENDIENTE")
+                                        : "S/D";
 
-                                    doc.text(calif.asignatura || "", tableX + 3, currentRow + 2, { width: colWidths[0] - 6 });
+                                    doc.text(calif.asignatura || "-", tableX + 3, currentRow + 3, { width: colWidths[0] - 6 });
                                     tableX += colWidths[0];
-
-                                    doc.text(calif.parcial_1 !== null ? calif.parcial_1.toFixed(2) : "-", tableX + 3, currentRow + 2, { width: colWidths[1] - 6, align: "center" });
+                                    doc.text(nota1, tableX, currentRow + 3, { width: colWidths[1] - 6, align: "center" });
                                     tableX += colWidths[1];
-
-                                    doc.text(calif.parcial_2 !== null ? calif.parcial_2.toFixed(2) : "-", tableX + 3, currentRow + 2, { width: colWidths[2] - 6, align: "center" });
+                                    doc.text(nota2, tableX, currentRow + 3, { width: colWidths[2] - 6, align: "center" });
                                     tableX += colWidths[2];
-
-                                    doc.text(calif.final !== null ? calif.final.toFixed(2) : "-", tableX + 3, currentRow + 2, { width: colWidths[3] - 6, align: "center" });
+                                    doc.text(nota3, tableX, currentRow + 3, { width: colWidths[3] - 6, align: "center" });
                                     tableX += colWidths[3];
-
-                                    doc.text(calif.maestro_nombre || "N/A", tableX + 3, currentRow + 2, { width: colWidths[4] - 6 });
+                                    doc.text(nota4, tableX, currentRow + 3, { width: colWidths[4] - 6, align: "center" });
+                                    tableX += colWidths[4];
+                                    doc.text(promedioFinal, tableX, currentRow + 3, { width: colWidths[5] - 6, align: "center" });
+                                    tableX += colWidths[5];
+                                    doc.text(condicion, tableX + 3, currentRow + 3, { width: colWidths[6] - 6, align: "center" });
 
                                     currentRow += 18;
-                                    if (currentRow > doc.page.height - 100) {
+                                    if (currentRow > doc.page.height - 140) {
                                         doc.addPage();
                                         currentRow = 40;
                                     }
                                 });
 
-                                doc.moveDown(1);
-
-                                // Promedio general
-                                doc.fontSize(10).fillColor("#0d2352").text(`PROMEDIO GENERAL: ${promedio}`, { align: "right" });
-                                doc.fontSize(10).fillColor("#0d2352").text(`PROMEDIO PARTICIPACIÓN: ${promedioParticipacion}`, { align: "right" });
                                 doc.moveDown(0.5);
-
-                                // Asistencia
-                                doc.fontSize(10).fillColor("#0d2352").text("RESUMEN DE ASISTENCIA", { underline: true });
+                                doc.fillColor("#0d2352").fontSize(10).text("RESUMEN DE ASISTENCIA", { underline: true });
                                 doc.moveDown(0.3);
                                 doc.fontSize(9).fillColor("#333");
-                                doc.text(`Presentes: ${stats.presente}  |  Ausentes: ${stats.ausente}  |  Tardanzas: ${stats.tardanza}  |  Excusas: ${stats.excusa}`);
+                                doc.text(`Presentes: ${stats.presente}     Ausentes: ${stats.ausente}`);
+                                doc.text(`Tardanzas: ${stats.tardanza}     Excusas: ${stats.excusa}`);
 
-                                doc.moveDown(1.5);
+                                doc.moveDown(1);
+                                doc.fillColor("#0d2352").fontSize(10).text("FIRMAS", { underline: true });
+                                doc.moveDown(0.8);
 
-                                // Espacios para firmas
-                                doc.fontSize(10).fillColor("#0d2352").text("FIRMAS Y AUTORIZACIÓN", { underline: true });
-                                doc.moveDown(2);
+                                const firmaStart = doc.y;
+                                doc.moveTo(70, firmaStart + 30).lineTo(220, firmaStart + 30).stroke("#333");
+                                doc.text("Maestro/Tutor", 70, firmaStart + 32, { width: 150, align: "center" });
 
-                                doc.fontSize(9).fillColor("#333");
-                                const firmaY = doc.y + 40;
-                                doc.moveTo(60, firmaY).lineTo(200, firmaY).stroke("#333");
-                                doc.text("Maestro/Tutor", 60, firmaY + 5, { width: 140 });
+                                doc.moveTo(320, firmaStart + 30).lineTo(470, firmaStart + 30).stroke("#333");
+                                doc.text("Director(a)", 320, firmaStart + 32, { width: 150, align: "center" });
 
-                                doc.moveTo(300, firmaY).lineTo(440, firmaY).stroke("#333");
-                                doc.text("Director(a)", 300, firmaY + 5, { width: 140 });
-
-                                doc.moveDown(4);
-
-                                // Pie de página
-                                doc.fontSize(8).fillColor("#aaa").text(`Generado el ${new Date().toLocaleDateString("es-DO")} a las ${new Date().toLocaleTimeString("es-DO")}`, { align: "right" });
+                                doc.moveDown(3);
+                                doc.fontSize(8).fillColor("#666").text(`Generado el ${new Date().toLocaleDateString("es-DO")} a las ${new Date().toLocaleTimeString("es-DO")}`, { align: "right" });
 
                                 doc.end();
                             });
