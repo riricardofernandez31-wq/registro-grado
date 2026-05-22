@@ -311,12 +311,40 @@
         <section id="sec-asistencia" class="section">
             <div class="panel">
                 <h3 class="panel-title">Control de Asistencia - <span id="fechaHoy"></span></h3>
-                <p style="color:#666; margin-bottom:20px; font-size:14px">Registre la asistencia diaria de los estudiantes.</p>
-                <div id="listaAsistencia"><p class="empty-row">Registre estudiantes primero para tomar asistencia.</p></div>
-                <div class="form-actions" style="margin-top:20px">
-                    <button class="btn-primary" id="btnGuardarAsistencia">Guardar Asistencia del Dia</button>
+                <p style="color:#666; margin-bottom:20px; font-size:14px">Registre la asistencia diaria y las participaciones del aula.</p>
+
+                <div class="asistencia-tabs">
+                    <button class="asistencia-tab active" data-tab="asistencia" onclick="seleccionarTabAsistencia('asistencia')">Asistencia</button>
+                    <button class="asistencia-tab" data-tab="participaciones" onclick="seleccionarTabAsistencia('participaciones')">Participaciones</button>
                 </div>
-                <div id="msgAsistencia" class="msg-success" style="display:none">Asistencia guardada exitosamente.</div>
+
+                <div id="panelAsistencia" class="asistencia-panel">
+                    <div id="listaAsistencia"><p class="empty-row">Registre estudiantes primero para tomar asistencia.</p></div>
+                    <div class="form-actions" style="margin-top:20px">
+                        <button class="btn-primary" id="btnGuardarAsistencia">Guardar Asistencia del Día</button>
+                    </div>
+                    <div id="msgAsistencia" class="msg-success" style="display:none">Asistencia guardada exitosamente.</div>
+                </div>
+
+                <div id="panelParticipaciones" class="asistencia-panel" style="display:none">
+                    <div class="form-grid" style="grid-template-columns:1fr 1fr; gap:12px; align-items:end; margin-bottom:16px;">
+                        <div class="field">
+                            <label>Aula</label>
+                            <select id="selAulaParticipaciones" class="filtro-select" onchange="cargarParticipacionesAula()">
+                                <option value="">Seleccione un aula</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label>Fecha</label>
+                            <input type="date" id="fechaParticipaciones" class="part-input" onchange="cargarParticipacionesAula()">
+                        </div>
+                    </div>
+                    <div id="listaParticipaciones"><p class="empty-row">Seleccione aula y fecha para cargar estudiantes.</p></div>
+                    <div class="form-actions" style="margin-top:20px">
+                        <button class="btn-primary" id="btnGuardarParticipaciones">Guardar Participaciones</button>
+                    </div>
+                    <div id="msgParticipaciones" class="msg-success" style="display:none">Participaciones guardadas correctamente.</div>
+                </div>
             </div>
         </section>
 

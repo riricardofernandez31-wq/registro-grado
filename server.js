@@ -30,6 +30,15 @@ const db = mysql.createPool({
     queueLimit:         0
 });
 
+function queryAsync(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.query(sql, params, function(err, rows) {
+            if (err) return reject(err);
+            resolve(rows);
+        });
+    });
+}
+
 function initDB() {
     const tablas = [
         `CREATE TABLE IF NOT EXISTS configuracion (
@@ -124,17 +133,20 @@ function initDB() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
         `CREATE TABLE IF NOT EXISTS calificaciones (
-            id             INT            NOT NULL AUTO_INCREMENT,
-            estudiante_id  INT            NOT NULL,
-            asignacion_id  INT                     DEFAULT NULL,
-            asignatura     VARCHAR(100)   NOT NULL,
-            competencia    VARCHAR(200)            DEFAULT NULL,
-            parcial_1      DECIMAL(5,2)            DEFAULT NULL,
-            parcial_2      DECIMAL(5,2)            DEFAULT NULL,
-            final          DECIMAL(5,2)            DEFAULT NULL,
-            observaciones  TEXT                    DEFAULT NULL,
-            anio_escolar   VARCHAR(20)             DEFAULT '2025-2026',
-            creado_en      TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            id                     INT            NOT NULL AUTO_INCREMENT,
+            estudiante_id          INT            NOT NULL,
+            asignacion_id          INT                     DEFAULT NULL,
+            asignatura             VARCHAR(100)   NOT NULL,
+            competencia            VARCHAR(200)            DEFAULT NULL,
+            nota1                  DECIMAL(5,2)            DEFAULT NULL,
+            nota2                  DECIMAL(5,2)            DEFAULT NULL,
+            nota3                  DECIMAL(5,2)            DEFAULT NULL,
+            nota4                  DECIMAL(5,2)            DEFAULT NULL,
+            promedio               DECIMAL(5,2)            DEFAULT NULL,
+            promedio_redondeado    INT                     DEFAULT NULL,
+            observaciones          TEXT                    DEFAULT NULL,
+            anio_escolar           VARCHAR(20)             DEFAULT '2025-2026',
+            creado_en              TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             CONSTRAINT fk_calif_estudiante FOREIGN KEY (estudiante_id) REFERENCES estudiantes (id)
                 ON DELETE CASCADE ON UPDATE CASCADE,
@@ -162,14 +174,19 @@ function initDB() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
         `CREATE TABLE IF NOT EXISTS participaciones (
-            id            INT          NOT NULL AUTO_INCREMENT,
-            estudiante_id INT          NOT NULL,
-            fecha         DATE         NOT NULL,
-            descripcion   TEXT                  DEFAULT NULL,
-            creado_en     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            id             INT          NOT NULL AUTO_INCREMENT,
+            estudiante_id  INT          NOT NULL,
+            fecha          DATE         NOT NULL,
+            puntuacion     TINYINT UNSIGNED          DEFAULT 0,
+            observacion    TEXT                      DEFAULT NULL,
+            registrado_por INT                       DEFAULT NULL,
+            descripcion    TEXT                      DEFAULT NULL,
+            creado_en      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             CONSTRAINT fk_part_estudiante FOREIGN KEY (estudiante_id) REFERENCES estudiantes (id)
-                ON DELETE CASCADE ON UPDATE CASCADE
+                ON DELETE CASCADE ON UPDATE CASCADE,
+            CONSTRAINT fk_part_usuario FOREIGN KEY (registrado_por) REFERENCES usuarios (id)
+                ON DELETE SET NULL ON UPDATE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
     ];
 
@@ -187,7 +204,18 @@ function initDB() {
         `ALTER TABLE estudiantes ADD COLUMN activo           TINYINT(1) NOT NULL DEFAULT 1`,
         `ALTER TABLE estudiantes ADD COLUMN creado_en        TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP`,
         `ALTER TABLE aulas ADD COLUMN maestro_guia_id        INT                   DEFAULT NULL`,
-        `ALTER TABLE aulas ADD CONSTRAINT fk_aula_maestro_guia FOREIGN KEY (maestro_guia_id) REFERENCES maestros(id) ON DELETE SET NULL ON UPDATE CASCADE`
+        `ALTER TABLE aulas ADD CONSTRAINT fk_aula_maestro_guia FOREIGN KEY (maestro_guia_id) REFERENCES maestros(id) ON DELETE SET NULL ON UPDATE CASCADE`,
+        `ALTER TABLE participaciones ADD COLUMN puntuacion TINYINT UNSIGNED DEFAULT 0`,
+        `ALTER TABLE participaciones ADD COLUMN observacion TEXT DEFAULT NULL`,
+        `ALTER TABLE participaciones ADD COLUMN registrado_por INT DEFAULT NULL`,
+        `ALTER TABLE participaciones ADD COLUMN descripcion TEXT DEFAULT NULL`,
+        `ALTER TABLE participaciones ADD CONSTRAINT fk_part_usuario FOREIGN KEY (registrado_por) REFERENCES usuarios(id) ON DELETE SET NULL ON UPDATE CASCADE`,
+        `ALTER TABLE calificaciones ADD COLUMN nota1 DECIMAL(5,2) DEFAULT NULL`,
+        `ALTER TABLE calificaciones ADD COLUMN nota2 DECIMAL(5,2) DEFAULT NULL`,
+        `ALTER TABLE calificaciones ADD COLUMN nota3 DECIMAL(5,2) DEFAULT NULL`,
+        `ALTER TABLE calificaciones ADD COLUMN nota4 DECIMAL(5,2) DEFAULT NULL`,
+        `ALTER TABLE calificaciones ADD COLUMN promedio DECIMAL(5,2) DEFAULT NULL`,
+        `ALTER TABLE calificaciones ADD COLUMN promedio_redondeado INT DEFAULT NULL`
     ];
 
     const datos = [
@@ -297,37 +325,63 @@ app.post("/api/estudiantes", function(req, res) {
     const { nombre, matricula, cedula, fecha_nacimiento, sexo, grado, seccion, aula_id, tutor, parentesco_tutor, telefono, direccion, observaciones } = req.body;
     if (!nombre || !matricula || !grado)
         return res.status(400).json({ error: "Nombre, matricula y grado son obligatorios." });
-    db.query(
-        "INSERT INTO estudiantes (nombre, matricula, cedula, fecha_nacimiento, sexo, grado, seccion, aula_id, tutor, parentesco_tutor, telefono, direccion, observaciones) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        [nombre, matricula, cedula||null, fecha_nacimiento||null, sexo||null, grado, seccion, aula_id||null, tutor, parentesco_tutor||null, telefono, direccion, observaciones],
-        function(err, result) {
-            if (err) {
-                console.error("POST /api/estudiantes:", err.message);
-                if (err.code === "ER_DUP_ENTRY")
-                    return res.status(409).json({ error: "Ya existe un estudiante con esa matricula." });
-                return res.status(500).json({ error: "Error al guardar estudiante.", detalle: err.message });
-            }
-            res.json({ ok: true, id: result.insertId });
+    // Si no se provee aula_id, intentar asignar según grado+seccion
+    function doInsert(aulaToUse) {
+        db.query(
+            "INSERT INTO estudiantes (nombre, matricula, cedula, fecha_nacimiento, sexo, grado, seccion, aula_id, tutor, parentesco_tutor, telefono, direccion, observaciones) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [nombre, matricula, cedula||null, fecha_nacimiento||null, sexo||null, grado, seccion, aulaToUse||null, tutor, parentesco_tutor||null, telefono, direccion, observaciones],
+            function(err, result) {
+                if (err) {
+                    console.error("POST /api/estudiantes:", err.message);
+                    if (err.code === "ER_DUP_ENTRY")
+                        return res.status(409).json({ error: "Ya existe un estudiante con esa matricula." });
+                    return res.status(500).json({ error: "Error al guardar estudiante.", detalle: err.message });
+                }
+                res.json({ ok: true, id: result.insertId });
+            });
+    }
+
+    if (aula_id) return doInsert(aula_id);
+    // buscar anio escolar configurado
+    db.query("SELECT anio_escolar FROM configuracion LIMIT 1", function(err, rows) {
+        const anio = (rows && rows[0] && rows[0].anio_escolar) ? rows[0].anio_escolar : '2025-2026';
+        if (!grado || !seccion) return doInsert(null);
+        db.query("SELECT id FROM aulas WHERE grado = ? AND seccion = ? AND anio_escolar = ? LIMIT 1", [grado, seccion, anio], function(err2, rows2) {
+            const aulaToUse = (rows2 && rows2[0]) ? rows2[0].id : null;
+            doInsert(aulaToUse);
         });
+    });
 });
 
 app.put("/api/estudiantes/:id", function(req, res) {
     const { nombre, matricula, cedula, fecha_nacimiento, sexo, grado, seccion, aula_id, tutor, parentesco_tutor, telefono, direccion, observaciones } = req.body;
     if (!nombre || !matricula || !grado)
         return res.status(400).json({ error: "Nombre, matricula y grado son obligatorios." });
-    db.query(
-        "UPDATE estudiantes SET nombre=?,matricula=?,cedula=?,fecha_nacimiento=?,sexo=?,grado=?,seccion=?,aula_id=?,tutor=?,parentesco_tutor=?,telefono=?,direccion=?,observaciones=? WHERE id=? AND activo=1",
-        [nombre, matricula, cedula||null, fecha_nacimiento||null, sexo||null, grado, seccion, aula_id||null, tutor, parentesco_tutor||null, telefono, direccion, observaciones, req.params.id],
-        function(err, result) {
-            if (err) {
-                if (err.code === "ER_DUP_ENTRY")
-                    return res.status(409).json({ error: "Ya existe un estudiante con esa matricula." });
-                return res.status(500).json({ error: "Error al actualizar estudiante." });
-            }
-            if (result.affectedRows === 0)
-                return res.status(404).json({ error: "Estudiante no encontrado." });
-            res.json({ ok: true });
+    function doUpdate(aulaToUse) {
+        db.query(
+            "UPDATE estudiantes SET nombre=?,matricula=?,cedula=?,fecha_nacimiento=?,sexo=?,grado=?,seccion=?,aula_id=?,tutor=?,parentesco_tutor=?,telefono=?,direccion=?,observaciones=? WHERE id=? AND activo=1",
+            [nombre, matricula, cedula||null, fecha_nacimiento||null, sexo||null, grado, seccion, aulaToUse||null, tutor, parentesco_tutor||null, telefono, direccion, observaciones, req.params.id],
+            function(err, result) {
+                if (err) {
+                    if (err.code === "ER_DUP_ENTRY")
+                        return res.status(409).json({ error: "Ya existe un estudiante con esa matricula." });
+                    return res.status(500).json({ error: "Error al actualizar estudiante." });
+                }
+                if (result.affectedRows === 0)
+                    return res.status(404).json({ error: "Estudiante no encontrado." });
+                res.json({ ok: true });
+            });
+    }
+
+    if (aula_id) return doUpdate(aula_id);
+    db.query("SELECT anio_escolar FROM configuracion LIMIT 1", function(err, rows) {
+        const anio = (rows && rows[0] && rows[0].anio_escolar) ? rows[0].anio_escolar : '2025-2026';
+        if (!grado || !seccion) return doUpdate(null);
+        db.query("SELECT id FROM aulas WHERE grado = ? AND seccion = ? AND anio_escolar = ? LIMIT 1", [grado, seccion, anio], function(err2, rows2) {
+            const aulaToUse = (rows2 && rows2[0]) ? rows2[0].id : null;
+            doUpdate(aulaToUse);
         });
+    });
 });
 
 app.delete("/api/estudiantes/:id", function(req, res) {
@@ -351,14 +405,33 @@ app.get("/api/calificaciones", function(req, res) {
 });
 
 app.post("/api/calificaciones", function(req, res) {
-    const { estudiante_id, asignatura, competencia, parcial_1, parcial_2, final, observaciones } = req.body;
+    const { estudiante_id, asignatura, competencia, nota1, nota2, nota3, nota4, observaciones, asignacion_id } = req.body;
     if (!estudiante_id || !asignatura)
         return res.status(400).json({ error: "Estudiante y asignatura son obligatorios." });
-    db.query("INSERT INTO calificaciones (estudiante_id, asignatura, competencia, parcial_1, parcial_2, final, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [estudiante_id, asignatura, competencia, parcial_1, parcial_2, final, observaciones],
+
+    // Parse numeric notes
+    const n1 = nota1 != null && nota1 !== '' ? Number(nota1) : null;
+    const n2 = nota2 != null && nota2 !== '' ? Number(nota2) : null;
+    const n3 = nota3 != null && nota3 !== '' ? Number(nota3) : null;
+    const n4 = nota4 != null && nota4 !== '' ? Number(nota4) : null;
+    const notas = [n1, n2, n3, n4].filter(n => n !== null && !isNaN(n));
+    let promedio = null;
+    let promedio_redondeado = null;
+    if (notas.length > 0) {
+        const suma = notas.reduce((a,b) => a + b, 0);
+        promedio = Number((suma / notas.length).toFixed(2));
+        promedio_redondeado = Math.round(promedio);
+    }
+
+    db.query(
+        "INSERT INTO calificaciones (estudiante_id, asignacion_id, asignatura, competencia, nota1, nota2, nota3, nota4, promedio, promedio_redondeado, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [estudiante_id, asignacion_id || null, asignatura, competencia || null, n1, n2, n3, n4, promedio, promedio_redondeado, observaciones || null],
         function(err, result) {
-            if (err) return res.status(500).json({ error: "Error al guardar calificacion." });
-            res.json({ ok: true, id: result.insertId });
+            if (err) {
+                console.error("Error INSERT calificaciones:", err.message);
+                return res.status(500).json({ error: "Error al guardar calificacion.", detalle: err.message });
+            }
+            res.json({ ok: true, id: result.insertId, promedio, promedio_redondeado });
         });
 });
 
@@ -478,6 +551,15 @@ app.delete("/api/aulas/:id", function(req, res) {
 app.get("/api/maestros", function(req, res) {
     db.query("SELECT * FROM maestros WHERE activo = 1 ORDER BY nombre", function(err, results) {
         if (err) return res.status(500).json({ error: "Error al obtener maestros." });
+        res.json(results);
+    });
+});
+
+// Devuelve solo maestros cuyo usuario tiene rol 'docente' (para dropdowns)
+app.get("/api/maestros/docentes", function(req, res) {
+    const sql = `SELECT m.* FROM maestros m JOIN usuarios u ON m.usuario_id = u.id WHERE m.activo = 1 AND u.rol = 'docente' ORDER BY m.nombre`;
+    db.query(sql, function(err, results) {
+        if (err) return res.status(500).json({ error: "Error al obtener maestros docentes." });
         res.json(results);
     });
 });
@@ -770,22 +852,32 @@ app.get("/api/exportar/boletin/pdf/:estudianteId", function(req, res) {
                             [estudianteId], function(err3, asistencia) {
                                 if (err3) return res.status(500).json({ error: "Error al obtener asistencia." });
 
-                                // Calcular promedio
-                                const finales = calificaciones
-                                    .filter(c => c.final !== null)
-                                    .map(c => parseFloat(c.final));
-                                const promedio = finales.length > 0
-                                    ? (finales.reduce((a, b) => a + b, 0) / finales.length).toFixed(2)
-                                    : "S.D.";
+                                db.query(
+                                    `SELECT AVG(puntuacion) AS promedio_participacion
+                                     FROM participaciones
+                                     WHERE estudiante_id = ? AND YEAR(fecha) = YEAR(CURDATE())`,
+                                    [estudianteId], function(err4, participacionRows) {
+                                        if (err4) return res.status(500).json({ error: "Error al obtener participaciones." });
+                                        const promedioParticipacion = (participacionRows && participacionRows[0] && participacionRows[0].promedio_participacion != null)
+                                            ? parseFloat(participacionRows[0].promedio_participacion).toFixed(2)
+                                            : "S.D.";
 
-                                // Estructurar datos de asistencia
-                                const stats = { presente: 0, ausente: 0, tardanza: 0, excusa: 0 };
-                                asistencia.forEach(a => {
-                                    if (stats[a.estado] !== undefined) stats[a.estado] = a.cantidad;
-                                });
+                                        // Calcular promedio
+                                        const finales = calificaciones
+                                            .filter(c => c.final !== null)
+                                            .map(c => parseFloat(c.final));
+                                        const promedio = finales.length > 0
+                                            ? (finales.reduce((a, b) => a + b, 0) / finales.length).toFixed(2)
+                                            : "S.D.";
 
-                                // Generar PDF
-                                const doc = new PDFKit({ margin: 40, size: 'letter' });
+                                        // Estructurar datos de asistencia
+                                        const stats = { presente: 0, ausente: 0, tardanza: 0, excusa: 0 };
+                                        asistencia.forEach(a => {
+                                            if (stats[a.estado] !== undefined) stats[a.estado] = a.cantidad;
+                                        });
+
+                                        // Generar PDF
+                                        const doc = new PDFKit({ margin: 40, size: 'letter' });
                                 res.setHeader("Content-Type", "application/pdf");
                                 res.setHeader("Content-Disposition", `attachment; filename="boletin_${est.matricula}.pdf"`);
                                 doc.pipe(res);
@@ -877,6 +969,7 @@ app.get("/api/exportar/boletin/pdf/:estudianteId", function(req, res) {
 
                                 // Promedio general
                                 doc.fontSize(10).fillColor("#0d2352").text(`PROMEDIO GENERAL: ${promedio}`, { align: "right" });
+                                doc.fontSize(10).fillColor("#0d2352").text(`PROMEDIO PARTICIPACIÓN: ${promedioParticipacion}`, { align: "right" });
                                 doc.moveDown(0.5);
 
                                 // Asistencia
@@ -909,6 +1002,112 @@ app.get("/api/exportar/boletin/pdf/:estudianteId", function(req, res) {
                     });
             });
     });
+});
+
+app.get("/api/exportar/boletin/excel/:estudianteId", async function(req, res) {
+    const estudianteId = parseInt(req.params.estudianteId);
+    if (isNaN(estudianteId)) return res.status(400).json({ error: "ID de estudiante inválido." });
+
+    try {
+        const configRows = await queryAsync("SELECT * FROM configuracion LIMIT 1");
+        const cfg = configRows && configRows.length ? configRows[0] : {};
+        const estudiantes = await queryAsync("SELECT * FROM estudiantes WHERE id = ? AND activo = 1", [estudianteId]);
+        if (!estudiantes.length) return res.status(404).json({ error: "Estudiante no encontrado." });
+        const est = estudiantes[0];
+
+        const calificaciones = await queryAsync("SELECT * FROM calificaciones WHERE estudiante_id = ? ORDER BY asignatura", [estudianteId]);
+        const participacionRows = await queryAsync(
+            "SELECT AVG(puntuacion) AS promedio_participacion FROM participaciones WHERE estudiante_id = ? AND YEAR(fecha) = YEAR(CURDATE())",
+            [estudianteId]
+        );
+        const promedioParticipacion = (participacionRows[0] && participacionRows[0].promedio_participacion != null)
+            ? parseFloat(participacionRows[0].promedio_participacion).toFixed(2)
+            : "S.D.";
+
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet("Boletín", { pageSetup: { paperSize: 9, orientation: 'portrait' } });
+
+        let row = 1;
+        worksheet.mergeCells(`A${row}:D${row}`);
+        worksheet.getCell(`A${row}`).value = "BOLETÍN ESTUDIANTIL MINERD";
+        worksheet.getCell(`A${row}`).font = { bold: true, size: 14, color: { argb: "FF0D2352" } };
+        worksheet.getCell(`A${row}`).alignment = { horizontal: "center", vertical: "center" };
+
+        row++;
+        worksheet.mergeCells(`A${row}:D${row}`);
+        worksheet.getCell(`A${row}`).value = cfg.nombre_centro || "Centro Educativo";
+        worksheet.getCell(`A${row}`).font = { size: 11 };
+        worksheet.getCell(`A${row}`).alignment = { horizontal: "center" };
+
+        row += 2;
+        worksheet.getCell(`A${row}`).value = "Estudiante:";
+        worksheet.getCell(`B${row}`).value = est.nombre;
+        row++;
+
+        worksheet.getCell(`A${row}`).value = "Matrícula:";
+        worksheet.getCell(`B${row}`).value = est.matricula;
+        row++;
+
+        worksheet.getCell(`A${row}`).value = "Grado:";
+        worksheet.getCell(`B${row}`).value = est.grado;
+        worksheet.getCell(`C${row}`).value = "Sección:";
+        worksheet.getCell(`D${row}`).value = est.seccion;
+        row++;
+
+        worksheet.getCell(`A${row}`).value = "Tutor:";
+        worksheet.getCell(`B${row}`).value = est.tutor || "N/A";
+        row += 2;
+
+        worksheet.getCell(`A${row}`).value = "CALIFICACIONES";
+        worksheet.getCell(`A${row}`).font = { bold: true, size: 11 };
+        row++;
+
+        const headers = ["Asignatura", "Parc. 1", "Parc. 2", "Final"];
+        headers.forEach((h, i) => {
+            const cell = worksheet.getCell(row, i + 1);
+            cell.value = h;
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0D2352" } };
+            cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+            cell.alignment = { horizontal: "center", vertical: "center" };
+        });
+        row++;
+
+        calificaciones.forEach((calif, idx) => {
+            worksheet.getCell(row, 1).value = calif.asignatura;
+            worksheet.getCell(row, 2).value = calif.parcial_1 !== null ? parseFloat(calif.parcial_1) : "-";
+            worksheet.getCell(row, 3).value = calif.parcial_2 !== null ? parseFloat(calif.parcial_2) : "-";
+            worksheet.getCell(row, 4).value = calif.final !== null ? parseFloat(calif.final) : "-";
+            if (idx % 2 === 0) {
+                for (let i = 1; i <= 4; i++) {
+                    worksheet.getCell(row, i).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4F7FF" } };
+                }
+            }
+            row++;
+        });
+
+        worksheet.getCell(`A${row}`).value = "PROMEDIO";
+        worksheet.getCell(`B${row}`).value = est.promedio_general !== null ? parseFloat(est.promedio_general).toFixed(2) : "S.D.";
+        worksheet.getCell(`A${row}`).font = { bold: true };
+        row++;
+        worksheet.getCell(`A${row}`).value = "PROMEDIO PARTICIPACIÓN";
+        worksheet.getCell(`B${row}`).value = promedioParticipacion;
+        worksheet.getCell(`A${row}`).font = { bold: true };
+
+        worksheet.columns = [
+            { width: 25 },
+            { width: 12 },
+            { width: 12 },
+            { width: 12 }
+        ];
+
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.setHeader("Content-Disposition", `attachment; filename="boletin_${est.matricula}.xlsx"`);
+        await workbook.xlsx.write(res);
+        res.end();
+    } catch (err) {
+        console.error("Error exportando boletín excel:", err);
+        res.status(500).json({ error: "Error al generar Excel de boletín." });
+    }
 });
 
 app.get("/api/exportar/boletin/excel", async function(req, res) {
@@ -1322,19 +1521,26 @@ app.get("/api/estudiantes/:id/ficha", function(req, res) {
                         [id], function(err3, asist) {
                             if (err3) return res.status(500).json({ error: "Error al obtener asistencia." });
                             db.query(
-                                "SELECT DATE_FORMAT(fecha,'%Y-%m-%d') AS fecha, descripcion FROM participaciones WHERE estudiante_id=? ORDER BY fecha DESC",
+                                "SELECT id, DATE_FORMAT(fecha,'%Y-%m-%d') AS fecha, puntuacion, observacion, descripcion FROM participaciones WHERE estudiante_id=? ORDER BY fecha DESC",
                                 [id], function(err4, parts) {
                                     if (err4) return res.status(500).json({ error: "Error al obtener participaciones." });
                                     const stats = { presente:0, ausente:0, tardanza:0, excusa:0 };
                                     asist.forEach(function(a) { if (stats[a.estado] !== undefined) stats[a.estado]++; });
-                                    const finales = califs.filter(function(c) { return c.final !== null; }).map(function(c) { return parseFloat(c.final); });
+                                    const finales = califs.filter(function(c) { return c.promedio !== null; }).map(function(c) { return parseFloat(c.promedio); });
                                     const promedio = finales.length ? (finales.reduce(function(a,b){return a+b;},0)/finales.length).toFixed(1) : null;
+                                    const participacionScores = parts
+                                        .filter(function(p) { return p.puntuacion !== null && p.puntuacion > 0; })
+                                        .map(function(p) { return Number(p.puntuacion); });
+                                    const promedio_participacion = participacionScores.length
+                                        ? (participacionScores.reduce(function(a,b){return a+b;},0) / participacionScores.length).toFixed(1)
+                                        : null;
                                     res.json({
-                                        estudiante:      est,
-                                        calificaciones:  califs,
-                                        asistencia:      { stats: stats, detalle: asist.slice(0, 10) },
-                                        participaciones: parts,
-                                        promedio_general: promedio
+                                        estudiante:          est,
+                                        calificaciones:      califs,
+                                        asistencia:          { stats: stats, detalle: asist.slice(0, 10) },
+                                        participaciones:     parts,
+                                        promedio_general:    promedio,
+                                        promedio_participacion: promedio_participacion
                                     });
                                 });
                         });
@@ -1343,16 +1549,58 @@ app.get("/api/estudiantes/:id/ficha", function(req, res) {
 });
 
 app.post("/api/participaciones", function(req, res) {
-    const { estudiante_id, fecha, descripcion } = req.body;
+    const { estudiante_id, fecha, puntuacion, observacion, descripcion, registrado_por } = req.body;
     if (!estudiante_id || !fecha)
         return res.status(400).json({ error: "Estudiante y fecha son obligatorios." });
+    const nota = Number(puntuacion);
+    const valorPuntuacion = !isNaN(nota) && nota > 0 ? Math.min(5, Math.max(1, nota)) : 0;
+    const observacionText = typeof observacion === 'string' ? observacion.trim() : (typeof descripcion === 'string' ? descripcion.trim() : "");
     db.query(
-        "INSERT INTO participaciones (estudiante_id, fecha, descripcion) VALUES (?,?,?)",
-        [estudiante_id, fecha, descripcion || ""],
+        "INSERT INTO participaciones (estudiante_id, fecha, puntuacion, observacion, descripcion, registrado_por) VALUES (?,?,?,?,?,?)",
+        [estudiante_id, fecha, valorPuntuacion, observacionText, observacionText, registrado_por || null],
         function(err, result) {
             if (err) return res.status(500).json({ error: "Error al guardar participacion." });
             res.json({ ok: true, id: result.insertId });
         });
+});
+
+app.get("/api/participaciones/aula/:aulaId/fecha/:fecha", function(req, res) {
+    const aulaId = parseInt(req.params.aulaId);
+    const fecha = req.params.fecha;
+    if (isNaN(aulaId) || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(fecha)) {
+        return res.status(400).json({ error: "Aula o fecha inválida." });
+    }
+    db.query(
+        `SELECT p.id, p.estudiante_id, p.fecha, p.puntuacion, p.observacion, p.descripcion, e.nombre AS estudiante_nombre
+         FROM participaciones p
+         JOIN estudiantes e ON e.id = p.estudiante_id
+         WHERE e.aula_id = ? AND p.fecha = ? AND e.activo = 1
+         ORDER BY e.nombre`,
+        [aulaId, fecha], function(err, rows) {
+            if (err) return res.status(500).json({ error: "Error al obtener participaciones por aula." });
+            res.json(rows || []);
+        });
+});
+
+app.get("/api/participaciones/:estudianteId", function(req, res) {
+    const estudianteId = parseInt(req.params.estudianteId);
+    if (isNaN(estudianteId)) return res.status(400).json({ error: "ID de estudiante inválido." });
+    db.query(
+        "SELECT id, DATE_FORMAT(fecha,'%Y-%m-%d') AS fecha, puntuacion, observacion, descripcion FROM participaciones WHERE estudiante_id=? ORDER BY fecha DESC",
+        [estudianteId], function(err, rows) {
+            if (err) return res.status(500).json({ error: "Error al obtener participaciones." });
+            res.json(rows || []);
+        });
+});
+
+app.delete("/api/participaciones/:id", function(req, res) {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "ID inválido." });
+    db.query("DELETE FROM participaciones WHERE id = ?", [id], function(err, result) {
+        if (err) return res.status(500).json({ error: "Error al eliminar participacion." });
+        if (result.affectedRows === 0) return res.status(404).json({ error: "Participacion no encontrada." });
+        res.json({ ok: true });
+    });
 });
 
 // =============================================

@@ -162,17 +162,20 @@ CREATE TABLE estudiantes (
 -- ============================================================
 DROP TABLE IF EXISTS calificaciones;
 CREATE TABLE calificaciones (
-    id             INT            NOT NULL AUTO_INCREMENT,
-    estudiante_id  INT            NOT NULL,
-    asignacion_id  INT                     DEFAULT NULL, -- maestro responsable
-    asignatura     VARCHAR(100)   NOT NULL,
-    competencia    VARCHAR(200)            DEFAULT NULL,
-    parcial_1      DECIMAL(5,2)            DEFAULT NULL,
-    parcial_2      DECIMAL(5,2)            DEFAULT NULL,
-    final          DECIMAL(5,2)            DEFAULT NULL, -- calculado: (p1+p2)/2
-    observaciones  TEXT                    DEFAULT NULL,
-    anio_escolar   VARCHAR(20)             DEFAULT '2025-2026',
-    creado_en      TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                     INT            NOT NULL AUTO_INCREMENT,
+    estudiante_id          INT            NOT NULL,
+    asignacion_id          INT                     DEFAULT NULL, -- maestro responsable
+    asignatura             VARCHAR(100)   NOT NULL,
+    competencia            VARCHAR(200)            DEFAULT NULL,
+    nota1                  DECIMAL(5,2)            DEFAULT NULL,
+    nota2                  DECIMAL(5,2)            DEFAULT NULL,
+    nota3                  DECIMAL(5,2)            DEFAULT NULL,
+    nota4                  DECIMAL(5,2)            DEFAULT NULL,
+    promedio               DECIMAL(5,2)            DEFAULT NULL,
+    promedio_redondeado    INT                     DEFAULT NULL,
+    observaciones          TEXT                    DEFAULT NULL,
+    anio_escolar           VARCHAR(20)             DEFAULT '2025-2026',
+    creado_en              TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     CONSTRAINT fk_calif_estudiante
         FOREIGN KEY (estudiante_id) REFERENCES estudiantes (id)
@@ -181,30 +184,6 @@ CREATE TABLE calificaciones (
         FOREIGN KEY (asignacion_id) REFERENCES asignaciones (id)
         ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Trigger: calcula automáticamente el promedio final al insertar
-DELIMITER //
-CREATE TRIGGER trg_calcular_final_insert
-BEFORE INSERT ON calificaciones
-FOR EACH ROW
-BEGIN
-    IF NEW.parcial_1 IS NOT NULL AND NEW.parcial_2 IS NOT NULL THEN
-        SET NEW.final = ROUND((NEW.parcial_1 + NEW.parcial_2) / 2, 2);
-    END IF;
-END;
-//
-
--- Trigger: recalcula el promedio final al actualizar parciales
-CREATE TRIGGER trg_calcular_final_update
-BEFORE UPDATE ON calificaciones
-FOR EACH ROW
-BEGIN
-    IF NEW.parcial_1 IS NOT NULL AND NEW.parcial_2 IS NOT NULL THEN
-        SET NEW.final = ROUND((NEW.parcial_1 + NEW.parcial_2) / 2, 2);
-    END IF;
-END;
-//
-DELIMITER ;
 
 -- ============================================================
 --  8. ASISTENCIA

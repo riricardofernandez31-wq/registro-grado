@@ -670,6 +670,62 @@ body {
     height: 15px;
 }
 
+.asistencia-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+}
+
+.asistencia-tab {
+    padding: 10px 18px;
+    border: 1px solid #dbe4f5;
+    background: #f8fbff;
+    color: #27314d;
+    border-radius: 999px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.asistencia-tab.active,
+.asistencia-tab:hover {
+    background: #1565c0;
+    color: #fff;
+    border-color: #1565c0;
+}
+
+.asistencia-panel {
+    margin-top: 12px;
+}
+
+.participaciones-lista-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.participacion-row {
+    display: grid;
+    grid-template-columns: 1.5fr 0.9fr 1.4fr;
+    gap: 12px;
+    align-items: center;
+    padding: 14px 16px;
+    border: 1px solid #e8edf7;
+    background: #fff;
+    border-radius: 12px;
+}
+
+.participacion-row .part-input,
+.participacion-row select {
+    width: 100%;
+}
+
+.participacion-row textarea {
+    width: 100%;
+    min-height: 44px;
+}
+
 /* ===================== REPORTES ===================== */
 
 .reports-grid {
@@ -992,11 +1048,31 @@ body {
 }
 
 .participaciones-lista {
-    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.participacion-item {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-top: 8px;
+    padding: 14px 16px;
+    background: #f4f7ff;
+    border-radius: 10px;
+    font-size: 13px;
+}
+
+.part-score-badge {
+    display: inline-block;
+    margin-left: 10px;
+    padding: 2px 8px;
+    background: #1565c0;
+    color: #fff;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
 }
 
 .participaciones-lista li {

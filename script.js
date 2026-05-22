@@ -476,24 +476,163 @@ document.getElementById("fechaHoy").textContent =
 
 async function cargarAsistencia() {
     try {
-        const res  = await fetch(`${API}/estudiantes`);
-        const data = await res.json();
-        if (!res.ok || !Array.isArray(data)) return;
+        const [resEst, resAulas] = await Promise.all([
+            fetch(`${API}/estudiantes`),
+            fetch(`${API}/aulas`)
+        ]);
+        const data = await resEst.json();
+        const aulas = await resAulas.json();
+        if (!resEst.ok || !Array.isArray(data)) return;
         estudiantesCache = data;
+        aulasCache = Array.isArray(aulas) ? aulas : [];
+
         const contenedor = document.getElementById("listaAsistencia");
         if (data.length === 0) {
             contenedor.innerHTML = '<p class="empty-row">Registre estudiantes primero.</p>';
+        } else {
+            contenedor.innerHTML = data.map(est => `
+                <div class="asistencia-row">
+                    <span class="asistencia-nombre">${est.nombre}</span>
+                    <label><input type="radio" name="as-${est.id}" value="presente" checked> Presente</label>
+                    <label><input type="radio" name="as-${est.id}" value="ausente"> Ausente</label>
+                    <label><input type="radio" name="as-${est.id}" value="tardanza"> Tardanza</label>
+                    <label><input type="radio" name="as-${est.id}" value="excusa"> Excusa</label>
+                </div>`).join("");
+        }
+
+        const selectAula = document.getElementById("selAulaParticipaciones");
+        if (selectAula) {
+            selectAula.innerHTML = '<option value="">Seleccione un aula</option>' + aulasCache
+                .map(a => `<option value="${a.id}">${a.aula_numero || a.grado + '-' + a.seccion}</option>`)
+                .join("");
+        }
+
+        const fechaParticipaciones = document.getElementById("fechaParticipaciones");
+        if (fechaParticipaciones) {
+            fechaParticipaciones.value = new Date().toISOString().split("T")[0];
+        }
+
+        seleccionarTabAsistencia("asistencia");
+        cargarParticipacionesAula();
+    } catch (err) { console.error("Error asistencia:", err); }
+}
+
+function seleccionarTabAsistencia(tab) {
+    document.querySelectorAll(".asistencia-tab").forEach(function(btn) {
+        btn.classList.toggle("active", btn.dataset.tab === tab);
+    });
+    document.getElementById("panelAsistencia").style.display = tab === "asistencia" ? "block" : "none";
+    document.getElementById("panelParticipaciones").style.display = tab === "participaciones" ? "block" : "none";
+}
+
+async function cargarParticipacionesAula() {
+    const aulaId = document.getElementById("selAulaParticipaciones")?.value;
+    const fecha = document.getElementById("fechaParticipaciones")?.value;
+    const contenedor = document.getElementById("listaParticipaciones");
+    if (!aulaId) {
+        if (contenedor) contenedor.innerHTML = '<p class="empty-row">Seleccione un aula para cargar los estudiantes.</p>';
+        return;
+    }
+    if (!fecha) {
+        if (contenedor) contenedor.innerHTML = '<p class="empty-row">Seleccione una fecha válida.</p>';
+        return;
+    }
+    const aulaEstudiantes = estudiantesCache.filter(est => String(est.aula_id) === String(aulaId) && est.activo === 1);
+    if (!aulaEstudiantes.length) {
+        if (contenedor) contenedor.innerHTML = '<p class="empty-row">No hay estudiantes activos en este aula.</p>';
+        return;
+    }
+
+    let existing = [];
+    try {
+        const res = await fetch(`${API}/participaciones/aula/${aulaId}/fecha/${fecha}`);
+        if (res.ok) {
+            existing = await res.json();
+        }
+    } catch (err) {
+        console.warn("No se pudo cargar participaciones existentes:", err);
+    }
+    const existingMap = existing.reduce((acc, item) => {
+        acc[item.estudiante_id] = item;
+        return acc;
+    }, {});
+
+    if (contenedor) {
+        contenedor.innerHTML = '<div class="participaciones-lista-rows">' + aulaEstudiantes.map(est => {
+            const registro = existingMap[est.id] || {};
+            const score = registro.puntuacion ? registro.puntuacion : "";
+            const obs = registro.observacion || registro.descripcion || "";
+            return `
+                <div class="participacion-row">
+                    <div><strong>${est.nombre}</strong></div>
+                    <div>
+                        <label style="font-size:13px;color:#555">Puntaje</label>
+                        <select class="part-score part-input" data-id="${est.id}">
+                            <option value="">--</option>
+                            <option value="1" ${score === 1 ? 'selected' : ''}>1</option>
+                            <option value="2" ${score === 2 ? 'selected' : ''}>2</option>
+                            <option value="3" ${score === 3 ? 'selected' : ''}>3</option>
+                            <option value="4" ${score === 4 ? 'selected' : ''}>4</option>
+                            <option value="5" ${score === 5 ? 'selected' : ''}>5</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:13px;color:#555">Observación</label>
+                        <input type="text" class="part-input part-observacion" data-id="${est.id}" placeholder="Breve nota..." value="${obs ? String(obs).replace(/"/g, '&quot;') : ''}">
+                    </div>
+                </div>`;
+        }).join('') + '</div>';
+    }
+}
+
+async function guardarParticipacionesAula() {
+    const aulaId = document.getElementById("selAulaParticipaciones")?.value;
+    const fecha = document.getElementById("fechaParticipaciones")?.value;
+    if (!aulaId || !fecha) {
+        alert("Seleccione aula y fecha antes de guardar.");
+        return;
+    }
+    const filas = Array.from(document.querySelectorAll(".participacion-row"));
+    const registros = filas.map(row => {
+        const estudianteId = row.querySelector(".part-score")?.dataset.id || row.querySelector(".part-observacion")?.dataset.id;
+        const puntuacion = parseInt(row.querySelector(".part-score")?.value || "", 10);
+        const observacion = row.querySelector(".part-observacion")?.value.trim() || "";
+        return {
+            estudiante_id: estudianteId ? parseInt(estudianteId, 10) : null,
+            fecha,
+            puntuacion: isNaN(puntuacion) ? 0 : puntuacion,
+            observacion
+        };
+    }).filter(r => r.estudiante_id && (r.puntuacion > 0 || r.observacion));
+
+    if (!registros.length) {
+        alert("Debe registrar al menos una puntuación o observación.");
+        return;
+    }
+
+    try {
+        const resultados = await Promise.all(registros.map(r => fetch(`${API}/participaciones`, {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify(r)
+        })));
+        const fallos = await Promise.all(resultados.map(async (res, idx) => ({ ok: res.ok, data: await res.json().catch(() => null), registro: registros[idx] })));
+        const error = fallos.find(item => !item.ok);
+        if (error) {
+            console.error("Error guardando participaciones:", error);
+            alert(error.data?.error || "Ocurrió un error al guardar algunas participaciones.");
             return;
         }
-        contenedor.innerHTML = data.map(est => `
-            <div class="asistencia-row">
-                <span class="asistencia-nombre">${est.nombre}</span>
-                <label><input type="radio" name="as-${est.id}" value="presente" checked> Presente</label>
-                <label><input type="radio" name="as-${est.id}" value="ausente"> Ausente</label>
-                <label><input type="radio" name="as-${est.id}" value="tardanza"> Tardanza</label>
-                <label><input type="radio" name="as-${est.id}" value="excusa"> Excusa</label>
-            </div>`).join("");
-    } catch (err) { console.error("Error asistencia:", err); }
+        const msg = document.getElementById("msgParticipaciones");
+        if (msg) {
+            msg.style.display = "block";
+            setTimeout(() => msg.style.display = "none", 3000);
+        }
+        cargarParticipacionesAula();
+    } catch (err) {
+        console.error("Error guardando participaciones:", err);
+        alert("No se pudo conectar al servidor.");
+    }
 }
 
 document.getElementById("btnGuardarAsistencia").addEventListener("click", async function() {
@@ -512,6 +651,10 @@ document.getElementById("btnGuardarAsistencia").addEventListener("click", async 
         msg.style.display = "block";
         setTimeout(() => msg.style.display = "none", 3000);
     } catch (err) { alert("No se pudo conectar al servidor."); }
+});
+
+document.getElementById("btnGuardarParticipaciones")?.addEventListener("click", async function() {
+    await guardarParticipacionesAula();
 });
 
 // =============================================
@@ -820,14 +963,17 @@ async function mostrarFichaEstudiante(id) {
                 }).join("")
               + '</tbody></table></div>';
 
+        const avgPart = data.promedio_participacion;
         const partsHTML = parts.length === 0
             ? '<p style="color:#aaa;font-size:13px;margin-top:8px">Sin participaciones registradas.</p>'
-            : '<ul class="participaciones-lista">'
+            : '<div class="participaciones-lista">'
               + parts.map(function(p) {
                     const fecha = new Date(p.fecha + "T00:00:00").toLocaleDateString("es-DO", { year:"numeric", month:"short", day:"numeric" });
-                    return '<li><span class="part-fecha">' + fecha + '</span><span class="part-desc">' + (p.descripcion || "Participacion registrada") + '</span></li>';
+                    const score = p.puntuacion > 0 ? '<span class="part-score-badge">' + p.puntuacion + '/5</span>' : '';
+                    const texto = p.observacion || p.descripcion || "Participación registrada";
+                    return '<div class="participacion-item"><div><span class="part-fecha">' + fecha + '</span>' + score + '</div><div class="part-desc">' + texto + '</div></div>';
                 }).join("")
-              + '</ul>';
+              + '</div>';
 
         const hoyStr = new Date().toISOString().split("T")[0];
         const fnac = fechaNac
@@ -846,6 +992,7 @@ async function mostrarFichaEstudiante(id) {
                             <span class="ficha-tag">Mat: ${e.matricula}</span>
                             <span class="ficha-tag">${e.grado}${e.seccion ? ' "' + e.seccion + '"' : ""}</span>
                             ${anioEscolar ? '<span class="ficha-tag">' + anioEscolar + '</span>' : ""}
+                            ${avgPart !== null ? '<span class="ficha-tag">Participación: ' + avgPart + '</span>' : ""}
                         </div>
                     </div>
                     ${promedio !== null ? `<div class="ficha-promedio-badge" style="border-color:${pColor};color:${pColor}">
@@ -894,7 +1041,15 @@ async function mostrarFichaEstudiante(id) {
                     <h4 class="ficha-section-title">Participaciones Diarias</h4>
                     <div class="participacion-form">
                         <input type="date" id="part-fecha" value="${hoyStr}" class="part-input">
-                        <input type="text" id="part-desc" placeholder="Descripcion de la participacion..." class="part-input part-input-flex">
+                        <select id="part-score" class="part-input" style="width:120px">
+                            <option value="">Puntaje</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                        </select>
+                        <input type="text" id="part-desc" placeholder="Descripción de la participación..." class="part-input part-input-flex">
                         <button onclick="agregarParticipacion(${e.id})" class="btn-primary" style="padding:10px 18px;font-size:13px;white-space:nowrap;width:auto">+ Agregar</button>
                     </div>
                     <div id="participaciones-lista-${e.id}">${partsHTML}</div>
@@ -922,16 +1077,23 @@ async function mostrarFichaEstudiante(id) {
 }
 
 async function agregarParticipacion(estudianteId) {
-    const fecha      = document.getElementById("part-fecha").value;
-    const descripcion = document.getElementById("part-desc").value.trim();
+    const fecha       = document.getElementById("part-fecha").value;
+    const puntuacion  = parseInt(document.getElementById("part-score").value || "", 10);
+    const observacion = document.getElementById("part-desc").value.trim();
     if (!fecha) { alert("Seleccione una fecha."); return; }
     try {
         const res = await fetch(`${API}/participaciones`, {
             method:"POST", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({ estudiante_id: estudianteId, fecha, descripcion })
+            body: JSON.stringify({
+                estudiante_id: estudianteId,
+                fecha,
+                puntuacion: isNaN(puntuacion) ? 0 : puntuacion,
+                observacion
+            })
         });
         if (!res.ok) { alert("Error al guardar participacion."); return; }
         document.getElementById("part-desc").value = "";
+        document.getElementById("part-score").value = "";
         mostrarFichaEstudiante(estudianteId);
     } catch (err) { alert("No se pudo conectar al servidor."); }
 }
@@ -942,7 +1104,8 @@ async function agregarParticipacion(estudianteId) {
 
 async function cargarMaestrosDropdown() {
     try {
-        const res = await fetch(`${API}/maestros`);
+        // Request only maestros vinculados a un usuario con rol 'docente'
+        const res = await fetch(`${API}/maestros/docentes`);
         const data = await res.json();
         if (!res.ok) return;
         maestrosCache = data;
