@@ -1003,6 +1003,7 @@ app.get("/api/exportar/boletin/pdf/:estudianteId", function(req, res) {
             });
     });
 });
+});
 
 app.get("/api/exportar/boletin/excel/:estudianteId", async function(req, res) {
     const estudianteId = parseInt(req.params.estudianteId);
