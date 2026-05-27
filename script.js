@@ -3,7 +3,11 @@
 //  script.js
 // =============================================
 
-const API = "https://registro-grado-production.up.railway.app/api";
+const API = (function(){
+    const host = (typeof window !== 'undefined' && window.location && window.location.hostname) ? window.location.hostname : '';
+    if (host === 'localhost' || host === '127.0.0.1') return 'http://localhost:3000/api';
+    return 'https://registro-grado-production.up.railway.app/api';
+})();
 let usuarioActual    = null;
 let estudiantesCache = [];
 let editandoEstudianteId = null;
