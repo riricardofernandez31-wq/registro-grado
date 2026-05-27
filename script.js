@@ -422,6 +422,28 @@ async function cargarSelectEstudiantes() {
     } catch (err) { console.error("Error select:", err); }
 }
 
+async function actualizarAsignacionCalificacion() {
+    const estudianteId = document.getElementById("cal-estudiante").value;
+    const asignatura   = document.getElementById("cal-asignatura").value;
+    const input        = document.getElementById("cal-asignacion-id");
+    input.value = "";
+    if (!estudianteId || !asignatura) return;
+    const estudiante = estudiantesCache.find(e => String(e.id) === String(estudianteId));
+    if (!estudiante || !estudiante.aula_id) return;
+    try {
+        const res = await fetch(`${API}/asignaciones/aula/${estudiante.aula_id}`);
+        if (!res.ok) return;
+        const asignaciones = await res.json();
+        const match = asignaciones.find(a => a.asignatura === asignatura);
+        if (match) input.value = match.id;
+    } catch (err) {
+        console.error("Error buscando asignacion:", err);
+    }
+}
+
+document.getElementById("cal-estudiante").addEventListener("change", actualizarAsignacionCalificacion);
+document.getElementById("cal-asignatura").addEventListener("change", actualizarAsignacionCalificacion);
+
 ["cal-p1","cal-p2","cal-p3","cal-p4"].forEach(function(id) {
     document.getElementById(id).addEventListener("input", function() {
         const p1 = parseFloat(document.getElementById("cal-p1").value) || 0;
@@ -442,6 +464,7 @@ document.getElementById("formCalificaciones").addEventListener("submit", async f
         nota2:         document.getElementById("cal-p2").value || null,
         nota3:         document.getElementById("cal-p3").value || null,
         nota4:         document.getElementById("cal-p4").value || null,
+        asignacion_id: document.getElementById("cal-asignacion-id").value || null,
         observaciones: document.getElementById("cal-obs").value.trim()
     };
     try {

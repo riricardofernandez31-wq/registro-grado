@@ -7,11 +7,13 @@ require("dotenv").config();
 const express  = require("express");
 const mysql    = require("mysql2");
 const cors     = require("cors");
+const bcrypt   = require("bcrypt");
 const PDFKit   = require("pdfkit");
 const ExcelJS  = require("exceljs");
 
 const app  = express();
 const PORT = process.env.PORT || 8080;
+const SALT_ROUNDS = 10;
 
 app.use(cors());
 app.use(express.json());
@@ -218,11 +220,12 @@ function initDB() {
         `ALTER TABLE calificaciones ADD COLUMN IF NOT EXISTS promedio_redondeado INT DEFAULT NULL`
     ];
 
+    const defaultAdminPasswordHash = bcrypt.hashSync('admin123', SALT_ROUNDS);
     const datos = [
         `INSERT IGNORE INTO configuracion (id, nombre_centro, anio_escolar, director, distrito, regional)
          VALUES (1, 'Centro Educativo', '2025-2026', '', '', '')`,
         `INSERT IGNORE INTO usuarios (nombre, usuario, password, rol)
-         VALUES ('Administrador', 'admin', 'admin123', 'admin')`
+         VALUES ('Administrador', 'admin', '${defaultAdminPasswordHash}', 'admin')`
     ];
 
     db.query("SET FOREIGN_KEY_CHECKS = 0", function() {
@@ -281,13 +284,18 @@ app.post("/api/login", function(req, res) {
     const { usuario, password } = req.body;
     if (!usuario || !password)
         return res.status(400).json({ error: "Faltan campos." });
-    db.query("SELECT id, nombre, rol FROM usuarios WHERE usuario = ? AND password = ?",
-        [usuario, password], function(err, results) {
-            if (err) { console.error("Error en login:", err.message); return res.status(500).json({ error: "Error en servidor.", detalle: err.message }); }
-            if (results.length === 0)
+    db.query("SELECT id, nombre, rol, password FROM usuarios WHERE usuario = ?", [usuario], function(err, results) {
+        if (err) { console.error("Error en login:", err.message); return res.status(500).json({ error: "Error en servidor.", detalle: err.message }); }
+        if (results.length === 0)
+            return res.status(401).json({ error: "Usuario o contrasena incorrectos." });
+        const user = results[0];
+        bcrypt.compare(password, user.password, function(err2, match) {
+            if (err2) { console.error("Error bcrypt compare:", err2.message); return res.status(500).json({ error: "Error en servidor.", detalle: err2.message }); }
+            if (!match)
                 return res.status(401).json({ error: "Usuario o contrasena incorrectos." });
-            res.json({ ok: true, usuario: results[0] });
+            res.json({ ok: true, usuario: { id: user.id, nombre: user.nombre, rol: user.rol } });
         });
+    });
 });
 
 // =============================================
@@ -409,7 +417,6 @@ app.post("/api/calificaciones", function(req, res) {
     if (!estudiante_id || !asignatura)
         return res.status(400).json({ error: "Estudiante y asignatura son obligatorios." });
 
-    // Parse numeric notes and calculate average over four valores.
     const parseNota = (value) => {
         const numero = value != null && value !== '' && !isNaN(Number(value)) ? Number(value) : 0;
         return Math.min(100, Math.max(0, numero));
@@ -421,15 +428,34 @@ app.post("/api/calificaciones", function(req, res) {
     const promedio = Number(((n1 + n2 + n3 + n4) / 4).toFixed(2));
     const promedio_redondeado = Math.round(promedio);
 
+    function insertCalificacion(asignacionIdToUse) {
+        db.query(
+            "INSERT INTO calificaciones (estudiante_id, asignacion_id, asignatura, competencia, nota1, nota2, nota3, nota4, promedio, promedio_redondeado, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [estudiante_id, asignacionIdToUse || null, asignatura, competencia || null, n1, n2, n3, n4, promedio, promedio_redondeado, observaciones || null],
+            function(err, result) {
+                if (err) {
+                    console.error("Error INSERT calificaciones:", err.message);
+                    return res.status(500).json({ error: "Error al guardar calificacion.", detalle: err.message });
+                }
+                res.json({ ok: true, id: result.insertId, promedio, promedio_redondeado });
+            });
+    }
+
+    if (asignacion_id) return insertCalificacion(asignacion_id);
+
     db.query(
-        "INSERT INTO calificaciones (estudiante_id, asignacion_id, asignatura, competencia, nota1, nota2, nota3, nota4, promedio, promedio_redondeado, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [estudiante_id, asignacion_id || null, asignatura, competencia || null, n1, n2, n3, n4, promedio, promedio_redondeado, observaciones || null],
-        function(err, result) {
-            if (err) {
-                console.error("Error INSERT calificaciones:", err.message);
-                return res.status(500).json({ error: "Error al guardar calificacion.", detalle: err.message });
+        `SELECT a.id
+         FROM asignaciones a
+         JOIN estudiantes e ON e.aula_id = a.aula_id
+         WHERE e.id = ? AND a.asignatura = ?
+         LIMIT 1`,
+        [estudiante_id, asignatura], function(err2, rows2) {
+            if (err2) {
+                console.error("Error al buscar asignacion para calificacion:", err2.message);
+                return res.status(500).json({ error: "Error al guardar calificacion.", detalle: err2.message });
             }
-            res.json({ ok: true, id: result.insertId, promedio, promedio_redondeado });
+            const asignacionToUse = (rows2 && rows2[0]) ? rows2[0].id : null;
+            insertCalificacion(asignacionToUse);
         });
 });
 
@@ -471,15 +497,21 @@ app.post("/api/usuarios", function(req, res) {
     const { nombre, usuario, password, rol } = req.body;
     if (!nombre || !usuario || !password || !rol)
         return res.status(400).json({ error: "Todos los campos son obligatorios." });
-    db.query("INSERT INTO usuarios (nombre, usuario, password, rol) VALUES (?, ?, ?, ?)",
-        [nombre, usuario, password, rol], function(err, result) {
-            if (err) {
-                if (err.code === "ER_DUP_ENTRY")
-                    return res.status(409).json({ error: "Ese nombre de usuario ya existe." });
-                return res.status(500).json({ error: "Error al crear usuario." });
-            }
-            res.json({ ok: true, id: result.insertId });
-        });
+    bcrypt.hash(password, SALT_ROUNDS, function(err, hash) {
+        if (err) {
+            console.error("Error bcrypt hash:", err.message);
+            return res.status(500).json({ error: "Error en servidor.", detalle: err.message });
+        }
+        db.query("INSERT INTO usuarios (nombre, usuario, password, rol) VALUES (?, ?, ?, ?)",
+            [nombre, usuario, hash, rol], function(err2, result) {
+                if (err2) {
+                    if (err2.code === "ER_DUP_ENTRY")
+                        return res.status(409).json({ error: "Ese nombre de usuario ya existe." });
+                    return res.status(500).json({ error: "Error al crear usuario." });
+                }
+                res.json({ ok: true, id: result.insertId });
+            });
+    });
 });
 
 app.delete("/api/usuarios/:id", function(req, res) {
