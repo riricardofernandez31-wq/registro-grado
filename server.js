@@ -582,7 +582,7 @@ app.delete("/api/aulas/:id", function(req, res) {
 // =============================================
 // Retorna usuarios activos que pueden ser asignados como Maestro Guía en Aulas.
 app.get("/api/maestros", function(req, res) {
-    const sql = `SELECT id, nombre, rol FROM usuarios WHERE activo = 1 AND rol IN ('docente','admin','director','coordinador') ORDER BY nombre`;
+    const sql = `SELECT id, nombre, rol FROM usuarios WHERE rol IN ('docente','admin','director','coordinador') ORDER BY nombre`;
     db.query(sql, function(err, results) {
         if (err) return res.status(500).json({ error: "Error al obtener maestros." });
         res.json(results);

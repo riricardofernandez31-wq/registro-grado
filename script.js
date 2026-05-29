@@ -1216,9 +1216,11 @@ document.getElementById("formAula")?.addEventListener("submit", async function(e
     } catch (err) { alert("No se pudo conectar."); }
 });
 
-function editarAula(id) {
+async function editarAula(id) {
     const aula = aulasCache.find(a => a.id === id);
     if (!aula) return;
+
+    await cargarMaestrosDropdown();
 
     editandoAulaId = id;
     document.getElementById("aula-numero").value = aula.aula_numero || "";
