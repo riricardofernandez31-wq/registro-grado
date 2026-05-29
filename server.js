@@ -557,15 +557,19 @@ app.post("/api/aulas", function(req, res) {
 });
 
 app.put("/api/aulas/:id", function(req, res) {
-    const { aula_numero, grado, seccion, capacidad, maestro_guia_id } = req.body;
+    const { aula_numero, grado, seccion, capacidad } = req.body;
+    const maestroGuiaId = req.body.maestro_guia_id || null;
     if (!grado || !seccion)
         return res.status(400).json({ error: "Grado y sección son obligatorios." });
 
     db.query(
         "UPDATE aulas SET aula_numero=?, grado=?, seccion=?, capacidad=?, maestro_guia_id=? WHERE id=?",
-        [aula_numero || null, grado, seccion, capacidad || 35, maestro_guia_id || null, req.params.id],
+        [aula_numero || null, grado, seccion, capacidad || 35, maestroGuiaId, req.params.id],
         function(err) {
-            if (err) return res.status(500).json({ error: "Error al actualizar aula." });
+            if (err) {
+                console.error("Error UPDATE /api/aulas/:id", err.message);
+                return res.status(500).json({ error: "Error al actualizar aula.", detalle: err.message });
+            }
             res.json({ ok: true });
         });
 });
