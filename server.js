@@ -212,12 +212,14 @@ function initDB() {
         `ALTER TABLE participaciones ADD COLUMN registrado_por INT DEFAULT NULL`,
         `ALTER TABLE participaciones ADD COLUMN descripcion TEXT DEFAULT NULL`,
         `ALTER TABLE participaciones ADD CONSTRAINT fk_part_usuario FOREIGN KEY (registrado_por) REFERENCES usuarios(id) ON DELETE SET NULL ON UPDATE CASCADE`,
-        `ALTER TABLE calificaciones ADD COLUMN IF NOT EXISTS nota1 DECIMAL(5,2) DEFAULT 0 AFTER competencia`,
-        `ALTER TABLE calificaciones ADD COLUMN IF NOT EXISTS nota2 DECIMAL(5,2) DEFAULT 0 AFTER nota1`,
-        `ALTER TABLE calificaciones ADD COLUMN IF NOT EXISTS nota3 DECIMAL(5,2) DEFAULT 0 AFTER nota2`,
-        `ALTER TABLE calificaciones ADD COLUMN IF NOT EXISTS nota4 DECIMAL(5,2) DEFAULT 0 AFTER nota3`,
-        `ALTER TABLE calificaciones ADD COLUMN IF NOT EXISTS promedio DECIMAL(5,2) DEFAULT NULL`,
-        `ALTER TABLE calificaciones ADD COLUMN IF NOT EXISTS promedio_redondeado INT DEFAULT NULL`
+        `ALTER TABLE calificaciones ADD COLUMN asignacion_id INT DEFAULT NULL`,
+        `ALTER TABLE calificaciones ADD CONSTRAINT fk_calif_asignacion FOREIGN KEY (asignacion_id) REFERENCES asignaciones(id) ON DELETE SET NULL ON UPDATE CASCADE`,
+        `ALTER TABLE calificaciones ADD COLUMN nota1 DECIMAL(5,2) DEFAULT 0 AFTER competencia`,
+        `ALTER TABLE calificaciones ADD COLUMN nota2 DECIMAL(5,2) DEFAULT 0 AFTER nota1`,
+        `ALTER TABLE calificaciones ADD COLUMN nota3 DECIMAL(5,2) DEFAULT 0 AFTER nota2`,
+        `ALTER TABLE calificaciones ADD COLUMN nota4 DECIMAL(5,2) DEFAULT 0 AFTER nota3`,
+        `ALTER TABLE calificaciones ADD COLUMN promedio DECIMAL(5,2) DEFAULT NULL`,
+        `ALTER TABLE calificaciones ADD COLUMN promedio_redondeado INT DEFAULT NULL`
     ];
 
     const defaultAdminPasswordHash = bcrypt.hashSync('admin123', SALT_ROUNDS);
