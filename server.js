@@ -206,7 +206,7 @@ function initDB() {
         `ALTER TABLE estudiantes ADD COLUMN activo           TINYINT(1) NOT NULL DEFAULT 1`,
         `ALTER TABLE estudiantes ADD COLUMN creado_en        TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP`,
         `ALTER TABLE aulas ADD COLUMN maestro_guia_id        INT                   DEFAULT NULL`,
-        `ALTER TABLE aulas ADD CONSTRAINT fk_aula_maestro_guia FOREIGN KEY (maestro_guia_id) REFERENCES maestros(id) ON DELETE SET NULL ON UPDATE CASCADE`,
+        `ALTER TABLE aulas ADD CONSTRAINT fk_aula_maestro_guia FOREIGN KEY (maestro_guia_id) REFERENCES usuarios(id) ON DELETE SET NULL ON UPDATE CASCADE`,
         `ALTER TABLE participaciones ADD COLUMN puntuacion TINYINT UNSIGNED DEFAULT 0`,
         `ALTER TABLE participaciones ADD COLUMN observacion TEXT DEFAULT NULL`,
         `ALTER TABLE participaciones ADD COLUMN registrado_por INT DEFAULT NULL`,
