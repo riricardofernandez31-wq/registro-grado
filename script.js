@@ -1181,12 +1181,24 @@ async function cargarTablaAulas() {
 document.getElementById("formAula")?.addEventListener("submit", async function(e) {
     e.preventDefault();
 
+    const maestroValue = document.getElementById("aula-maestro-guia").value;
+    const grado = document.getElementById("aula-grado").value;
+    const seccion = document.getElementById("aula-seccion").value;
+    const anioEscolar = document.getElementById("cfg-anio")?.value.trim() || null;
+
+    if (!grado || !seccion) {
+        alert("Grado y sección son obligatorios.");
+        return;
+    }
+
+    const maestroGuiaId = maestroValue && maestroValue !== "undefined" ? parseInt(maestroValue, 10) : null;
     const datos = {
         aula_numero: document.getElementById("aula-numero").value.trim(),
-        grado: document.getElementById("aula-grado").value,
-        seccion: document.getElementById("aula-seccion").value,
-        capacidad: parseInt(document.getElementById("aula-capacidad").value) || 35,
-        maestro_guia_id: document.getElementById("aula-maestro-guia").value || null
+        grado,
+        seccion,
+        capacidad: parseInt(document.getElementById("aula-capacidad").value, 10) || 35,
+        maestro_guia_id: Number.isNaN(maestroGuiaId) ? null : maestroGuiaId,
+        anio_escolar: anioEscolar
     };
 
     try {
@@ -1200,7 +1212,7 @@ document.getElementById("formAula")?.addEventListener("submit", async function(e
         });
         const data = await res.json();
 
-        if (!res.ok) { alert(data.error || "Error"); return; }
+        if (!res.ok) { alert(data.error || "Error al guardar aula."); return; }
 
         this.reset();
         cancelarEdicionAula();
@@ -1213,7 +1225,7 @@ document.getElementById("formAula")?.addEventListener("submit", async function(e
         }
 
         cargarTablaAulas();
-    } catch (err) { alert("No se pudo conectar."); }
+    } catch (err) { alert("No se pudo conectar al servidor."); }
 });
 
 async function editarAula(id) {
