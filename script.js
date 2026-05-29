@@ -1141,7 +1141,7 @@ async function cargarMaestrosDropdown() {
         const select = document.getElementById("aula-maestro-guia");
         if (!select) return;
         select.innerHTML = '<option value="">-- Sin asignar --</option>' +
-            data.map(m => `<option value="${m.id}">${m.nombre}</option>`).join("");
+            data.map(m => `<option value="${m.id}">${m.nombre} ${m.rol ? `(${m.rol})` : ''}</option>`).join("");
     } catch (err) { console.error("Error cargando maestros:", err); }
 }
 
