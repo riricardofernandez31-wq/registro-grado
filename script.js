@@ -14,9 +14,7 @@ let editandoEstudianteId = null;
 let aulasCache = [];
 let maestrosCache = [];
 let editandoAulaId = null;
-let chartAsistencia = null;
 let chartPromedioGrado = null;
-let chartDistribucionNotas = null;
 
 function parseFechaMySQL(fecha) {
     if (!fecha) return null;
@@ -240,28 +238,54 @@ async function cargarDashboard() {
             const sres = await fetch(`${API}/dashboard/stats`);
             const stats = await sres.json();
             if (sres.ok) {
-                const kpiAulas = document.getElementById("kpi-aulas");
-                if (kpiAulas) kpiAulas.textContent = stats.total_aulas || 0;
-                const kpiMaestros = document.getElementById("kpi-maestros");
-                if (kpiMaestros) kpiMaestros.textContent = stats.total_maestros || 0;
                 const kpiAsistencia = document.getElementById("kpi-asistencia");
                 if (kpiAsistencia) kpiAsistencia.textContent = typeof stats.asistencia_hoy === 'number' ? stats.asistencia_hoy : 0;
                 const kpiPromedio = document.getElementById("kpi-promedio");
-                if (kpiPromedio) kpiPromedio.textContent = typeof stats.promedio_general === 'number' ? stats.promedio_general : 0;
+                if (kpiPromedio) kpiPromedio.textContent = typeof stats.promedio_general === 'number' ? stats.promedio_general.toFixed(1) : 0;
                 const kpiAlertas = document.getElementById("kpi-alertas");
                 if (kpiAlertas) kpiAlertas.textContent = stats.alertas_academicas || 0;
             }
         } catch (err) { console.error("Error cargando stats:", err); }
 
+        // Llenar tabla de últimos estudiantes registrados (5)
         const tbody     = document.getElementById("tablaRecientes");
         const recientes = data.slice(0, 5);
         if (recientes.length === 0) {
             tbody.innerHTML = '<tr><td colspan="4" class="empty-row">No hay estudiantes registrados aun.</td></tr>';
-            return;
+        } else {
+            tbody.innerHTML = recientes.map(e =>
+                `<tr><td>${e.nombre}</td><td>${e.matricula}</td><td>${e.grado}</td><td>${e.seccion||"—"}</td></tr>`
+            ).join("");
         }
-        tbody.innerHTML = recientes.map(e =>
-            `<tr><td>${e.nombre}</td><td>${e.matricula}</td><td>${e.grado}</td><td>${e.seccion||"—"}</td></tr>`
-        ).join("");
+
+        // Llenar tabla de Top 5 alertas académicas
+        try {
+            const alertRes = await fetch(`${API}/dashboard/alertas-academicas`);
+            const alertas = alertRes.ok ? await alertRes.json() : [];
+            const tbodyAlertas = document.getElementById("tablaAlertas");
+            if (!tbodyAlertas) return;
+            
+            if (!Array.isArray(alertas) || alertas.length === 0) {
+                tbodyAlertas.innerHTML = '<tr><td colspan="3" class="empty-row">No hay alertas académicas.</td></tr>';
+            } else {
+                const top5 = alertas.slice(0, 5);
+                tbodyAlertas.innerHTML = top5.map(a => {
+                    let nivelColor = 'background: #2e7d32; color: #fff;';
+                    if (a.promedio < 60) {
+                        nivelColor = 'background: #c62828; color: #fff;';
+                    } else if (a.promedio < 75) {
+                        nivelColor = 'background: #e65100; color: #fff;';
+                    } else if (a.promedio < 85) {
+                        nivelColor = 'background: #f57f17; color: #fff;';
+                    }
+                    return `<tr><td>${a.nombre_estudiante || a.nombre}</td><td>${a.promedio ? a.promedio.toFixed(1) : '—'}</td><td><span style="${nivelColor} padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600;">${a.nivel || 'Bajo'}</span></td></tr>`;
+                }).join("");
+            }
+        } catch (err) { 
+            console.warn("Error cargando alertas académicas:", err);
+            const tbodyAlertas = document.getElementById("tablaAlertas");
+            if (tbodyAlertas) tbodyAlertas.innerHTML = '<tr><td colspan="3" class="empty-row">Error al cargar alertas</td></tr>';
+        }
     } catch (err) { console.error("Error dashboard:", err); }
 }
 
@@ -274,29 +298,13 @@ async function initGraficas() {
         return;
     }
 
-    let asistenciaData = [];
     let promedioData = [];
-    let distribucionData = { excelente: 0, bueno: 0, regular: 0, bajo: 0 };
 
     try {
-        const [asRes, pgRes, dnRes] = await Promise.all([
-            fetch(`${API}/dashboard/asistencia-mensual`),
-            fetch(`${API}/dashboard/promedios-por-grado`),
-            fetch(`${API}/dashboard/distribucion-notas`)
-        ]);
-
-        const asJson = asRes.ok ? await asRes.json() : [];
+        const pgRes = await fetch(`${API}/dashboard/promedios-por-grado`);
         const pgJson = pgRes.ok ? await pgRes.json() : [];
-        const dnJson = dnRes.ok ? await dnRes.json() : {};
 
-        asistenciaData = Array.isArray(asJson) ? asJson.map(d => ({ label: d.mes || '', value: Number(d.porcentaje || 0) })) : [];
         promedioData = Array.isArray(pgJson) ? pgJson.map(d => ({ label: d.grado || '', value: Number(d.promedio || 0) })) : [];
-        distribucionData = {
-            excelente: Number(dnJson.excelente || 0),
-            bueno: Number(dnJson.bueno || 0),
-            regular: Number(dnJson.regular || 0),
-            bajo: Number(dnJson.bajo || 0)
-        };
     } catch (err) {
         console.error('Error cargando datos de gráficas:', err);
     }
@@ -307,19 +315,11 @@ async function initGraficas() {
         if (ctx._chartInstance) ctx._chartInstance.destroy();
         const chart = new Chart(ctx, {
             type,
-            data: { labels, datasets: [{ label: label || '', data: values, backgroundColor: type === 'doughnut' ? ['#2e7d32','#1565c0','#e65100','#c62828'] : '#6a1b9a' }] },
+            data: { labels, datasets: [{ label: label || '', data: values, backgroundColor: '#1565c0', borderColor: '#0d47a1', borderWidth: 1 }] },
             options: { responsive: true, maintainAspectRatio: true }
         });
         ctx._chartInstance = chart;
     };
-
-    crearGrafica(
-        'chartAsistencia',
-        'bar',
-        asistenciaData.map(d => d.label),
-        asistenciaData.map(d => d.value),
-        'Asistencia (%)'
-    );
 
     crearGrafica(
         'chartPromedioGrado',
@@ -327,13 +327,6 @@ async function initGraficas() {
         promedioData.map(d => d.label),
         promedioData.map(d => d.value),
         'Promedio'
-    );
-
-    crearGrafica(
-        'chartDistribucion',
-        'doughnut',
-        ['Excelente', 'Bueno', 'Regular', 'Bajo'],
-        [distribucionData.excelente, distribucionData.bueno, distribucionData.regular, distribucionData.bajo]
     );
 }
 

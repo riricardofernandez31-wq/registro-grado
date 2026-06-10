@@ -95,17 +95,17 @@
 
         <!-- INICIO -->
         <section id="sec-inicio" class="section active">
-            <!-- SECCIÓN 1: KPIS -->
+            <!-- SECCIÓN 1: KPIS (Solo 4 tarjetas) -->
             <div class="dashboard-kpis">
                 <div class="kpi-card kpi-estudiantes">
                     <div class="kpi-icon">👥</div>
                     <div class="kpi-info">
                         <span class="kpi-value" id="kpi-estudiantes">0</span>
-                        <span class="kpi-label">Estudiantes</span>
+                        <span class="kpi-label">Estudiantes Activos</span>
                     </div>
                 </div>
                 <div class="kpi-card kpi-asistencia">
-                    <div class="kpi-icon">✓</div>
+                    <div class="kpi-icon">✅</div>
                     <div class="kpi-info">
                         <span class="kpi-value"><span id="kpi-asistencia">0</span>%</span>
                         <span class="kpi-label">Asistencia Hoy</span>
@@ -122,70 +122,41 @@
                     <div class="kpi-icon">⚠️</div>
                     <div class="kpi-info">
                         <span class="kpi-value" id="kpi-alertas">0</span>
-                        <span class="kpi-label">Alertas</span>
-                    </div>
-                </div>
-                <div class="kpi-card kpi-aulas">
-                    <div class="kpi-icon">🏫</div>
-                    <div class="kpi-info">
-                        <span class="kpi-value" id="kpi-aulas">0</span>
-                        <span class="kpi-label">Aulas Activas</span>
-                    </div>
-                </div>
-                <div class="kpi-card kpi-maestros">
-                    <div class="kpi-icon">👨‍🏫</div>
-                    <div class="kpi-info">
-                        <span class="kpi-value" id="kpi-maestros">0</span>
-                        <span class="kpi-label">Maestros</span>
+                        <span class="kpi-label">Alertas Académicas</span>
                     </div>
                 </div>
             </div>
 
-            <!-- SECCIÓN 2: GRÁFICAS -->
-            <div class="dashboard-charts">
-                <div class="chart-card">
-                    <h3>Asistencia Últimos 6 Meses</h3>
-                    <canvas id="chartAsistencia" height="250"></canvas>
+            <!-- SECCIÓN 2: GRÁFICA Y TABLA DE ALERTAS EN UNA FILA -->
+            <div class="dashboard-main" style="display: grid; grid-template-columns: 60% 40%; gap: 24px; margin: 24px 0;">
+                <!-- Gráfica de Promedio por Grado (60%) -->
+                <div class="panel">
+                    <h3 class="panel-title">Promedio Académico por Grado</h3>
+                    <canvas id="chartPromedioGrado" height="300"></canvas>
                 </div>
-                <div class="chart-card">
-                    <h3>Promedio por Grado</h3>
-                    <canvas id="chartPromedioGrado" height="250"></canvas>
-                </div>
-                <div class="chart-card">
-                    <h3>Distribución de Notas</h3>
-                    <canvas id="chartDistribucion" height="250"></canvas>
-                </div>
-            </div>
-
-            <!-- SECCIÓN 3: TABLAS -->
-            <div class="dashboard-tables">
-                <div class="panel panel-large">
-                    <h3 class="panel-title">Estudiantes Que Necesitan Atención</h3>
-                    <div class="table-wrap"><table class="data-table">
+                <!-- Tabla de Top 5 Alertas (40%) -->
+                <div class="panel">
+                    <h3 class="panel-title">Top 5 Alertas</h3>
+                    <div class="table-wrap"><table class="data-table" style="font-size: 12px;">
                         <thead>
-                            <tr>
-                                <th>Nombre</th>
-                                <th>Grado</th>
-                                <th>Sección</th>
-                                <th>Promedio</th>
-                                <th>Asistencia</th>
-                                <th>Nivel</th>
-                            </tr>
+                            <tr><th>Estudiante</th><th>Promedio</th><th>Nivel</th></tr>
                         </thead>
                         <tbody id="tablaAlertas">
-                            <tr><td colspan="6" class="empty-row">Cargando...</td></tr>
+                            <tr><td colspan="3" class="empty-row">Cargando...</td></tr>
                         </tbody>
                     </table></div>
                 </div>
-                <div class="panel panel-small">
-                    <h3 class="panel-title">Estudiantes Registrados Recientemente</h3>
-                    <div class="table-wrap"><table class="data-table">
-                        <thead><tr><th>Nombre</th><th>Matrícula</th><th>Grado</th><th>Sección</th></tr></thead>
-                        <tbody id="tablaRecientes">
-                            <tr><td colspan="4" class="empty-row">No hay estudiantes registrados aun.</td></tr>
-                        </tbody>
-                    </table></div>
-                </div>
+            </div>
+
+            <!-- SECCIÓN 3: ÚLTIMOS ESTUDIANTES REGISTRADOS -->
+            <div class="panel" style="margin-top: 24px;">
+                <h3 class="panel-title">Últimos Estudiantes Registrados</h3>
+                <div class="table-wrap"><table class="data-table">
+                    <thead><tr><th>Nombre</th><th>Matrícula</th><th>Grado</th><th>Sección</th></tr></thead>
+                    <tbody id="tablaRecientes">
+                        <tr><td colspan="4" class="empty-row">No hay estudiantes registrados aun.</td></tr>
+                    </tbody>
+                </table></div>
             </div>
         </section>
 
