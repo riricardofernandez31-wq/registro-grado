@@ -36,6 +36,12 @@ window.addEventListener("load", async function() {
         if (data.nombre_centro)
             document.getElementById("loginNombreCentro").textContent = data.nombre_centro;
     } catch (err) {}
+    
+    // Restaurar sesión si existe rol guardado en localStorage
+    const userRol = localStorage.getItem('userRol');
+    if (userRol) {
+        aplicarVistaRol(userRol);
+    }
 });
 
 document.getElementById("loginForm").addEventListener("submit", async function(e) {
@@ -59,13 +65,16 @@ document.getElementById("loginForm").addEventListener("submit", async function(e
 
         errorDiv.style.display = "none";
         usuarioActual = data.usuario;
+        localStorage.setItem('userRol', data.usuario.rol);
         document.getElementById("userNameDisplay").textContent = data.usuario.nombre;
         document.getElementById("userRolBadge").textContent    = formatRol(data.usuario.rol);
         document.getElementById("loginContainer").style.display = "none";
         document.getElementById("dashboard").style.display      = "flex";
         aplicarPermisos(data.usuario.rol);
+        aplicarVistaRol(data.usuario.rol);
         cargarNombreCentro();
-        mostrarSeccion("inicio");
+        const seccionInicial = data.usuario.rol === "docente" ? "asistencia" : "inicio";
+        mostrarSeccion(seccionInicial);
 
     } catch (err) {
         errorDiv.textContent   = "No se pudo conectar al servidor. Esta corriendo Node.js?";
@@ -94,6 +103,31 @@ function aplicarPermisos(rol) {
     }
 }
 
+function aplicarVistaRol(rol) {
+    const navItems = document.querySelectorAll('.nav-item');
+    
+    // Roles que ven el menú completo
+    const rolesCompletos = ['admin', 'director', 'coordinador', 'secretaria'];
+    
+    // Si es rol docente, mostrar solo las 4 secciones permitidas
+    if (rol === 'docente') {
+        const seccionesDocente = ['asistencia', 'calificaciones'];
+        navItems.forEach(item => {
+            const seccion = item.getAttribute('data-section');
+            if (seccionesDocente.includes(seccion)) {
+                item.style.display = 'flex';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    } else if (rolesCompletos.includes(rol)) {
+        // Mostrar todas las secciones para roles admin, director, coordinador, secretaria
+        navItems.forEach(item => {
+            item.style.display = 'flex';
+        });
+    }
+}
+
 // =============================================
 //  NOMBRE DEL CENTRO EN SIDEBAR
 // =============================================
@@ -117,6 +151,7 @@ async function cargarNombreCentro() {
 document.getElementById("btnLogout").addEventListener("click", function() {
     usuarioActual    = null;
     estudiantesCache = [];
+    localStorage.removeItem('userRol');
     document.getElementById("dashboard").style.display      = "none";
     document.getElementById("loginContainer").style.display = "flex";
     document.getElementById("loginForm").reset();
