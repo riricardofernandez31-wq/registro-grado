@@ -164,7 +164,7 @@ body {
 
 .dashboard-kpis {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 16px;
     margin-bottom: 24px;
 }
@@ -208,6 +208,13 @@ body {
 .kpi-alertas { border-top-color: #ef6c00; }
 .kpi-aulas { border-top-color: #0288d1; }
 .kpi-maestros { border-top-color: #00897b; }
+
+.dashboard-main {
+    display: grid;
+    grid-template-columns: 60% 40%;
+    gap: 24px;
+    margin: 24px 0;
+}
 
 .dashboard-charts {
     display: grid;
@@ -1192,6 +1199,9 @@ body {
     .sidebar {
         transform: translateX(-100%);
         transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+        position: fixed;
+        width: 240px;
+        z-index: 100;
     }
 
     .sidebar.open {
@@ -1201,15 +1211,24 @@ body {
     /* --- Contenido ocupa todo el ancho --- */
     .main-content {
         margin-left: 0;
+        width: 100%;
+        padding: 0;
     }
 
-    /* --- Topbar --- */
+    .app-layout {
+        flex-direction: column;
+    }
+
+    /* --- Topbar responsivo --- */
     .topbar {
-        padding: 14px 16px;
+        padding: 12px 14px;
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
     }
 
     .topbar h2 {
-        font-size: 17px;
+        font-size: 16px;
         margin-bottom: 0;
     }
 
@@ -1217,36 +1236,89 @@ body {
         display: none;
     }
 
+    .topbar-user {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .topbar-user .user-badge {
+        max-width: 120px;
+        font-size: 12px;
+    }
+
     /* --- Secciones --- */
     .section {
-        padding: 14px 12px;
+        padding: 12px 12px;
     }
 
     /* --- Panel --- */
     .panel {
-        padding: 16px 14px;
+        padding: 14px 12px;
         border-radius: 12px;
+        margin-bottom: 12px;
     }
 
     .panel-title {
-        font-size: 15px;
-        margin-bottom: 14px;
-        padding-bottom: 10px;
+        font-size: 14px;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
     }
 
-    /* --- Cards del dashboard: 2 columnas --- */
-    .cards {
+    /* --- Dashboard KPIs: 2 columnas en móvil --- */
+    .dashboard-kpis {
         grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
+        gap: 12px;
         margin-bottom: 16px;
     }
 
-    .card {
-        padding: 16px 12px;
+    .dashboard-kpis .kpi-card {
+        padding: 14px 12px;
+        gap: 10px;
     }
 
-    .card h3 {
+    .dashboard-kpis .kpi-icon {
         font-size: 24px;
+    }
+
+    .dashboard-kpis .kpi-value {
+        font-size: 26px;
+    }
+
+    .dashboard-kpis .kpi-label {
+        font-size: 12px;
+    }
+
+    /* --- Dashboard Main: apilado verticalmente en móvil --- */
+    .dashboard-main {
+        grid-template-columns: 1fr;
+        gap: 16px;
+        margin: 16px 0;
+    }
+
+    /* --- Tablas con scroll horizontal --- */
+    .table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        border-radius: 8px;
+    }
+
+    .table-wrap .data-table {
+        min-width: 480px;
+        font-size: 13px;
+    }
+
+    .data-table thead {
+        position: sticky;
+        top: 0;
+        background: #f8faff;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 10px 8px;
+        font-size: 12px;
     }
 
     /* --- Formularios: una columna --- */
@@ -1259,63 +1331,110 @@ body {
         grid-column: span 1;
     }
 
-    /* --- Botones más grandes para touch --- */
-    .btn-primary {
+    .field {
         width: 100%;
-        padding: 15px 20px;
-        font-size: 15px;
     }
 
+    .field input,
+    .field select,
+    .field textarea {
+        width: 100%;
+        padding: 12px 12px;
+        font-size: 14px;
+    }
+
+    /* --- Botones más grandes para touch --- */
+    .btn-primary,
     .btn-secondary {
         width: 100%;
-        padding: 14px 20px;
-        font-size: 15px;
+        padding: 14px 16px;
+        font-size: 14px;
+        border-radius: 10px;
+        min-height: 48px;
+        cursor: pointer;
     }
 
     .form-actions {
+        display: flex;
         flex-direction: column;
-        gap: 10px;
-    }
-
-    /* --- Login --- */
-    .login-box {
-        width: 95vw;
-        padding: 32px 20px;
-        border-radius: 16px;
-    }
-
-    /* --- Reportes --- */
-    .reports-grid {
-        grid-template-columns: 1fr;
         gap: 12px;
     }
 
-    /* --- Asistencia: filas en grid 2 columnas --- */
+    .form-actions button {
+        width: 100%;
+        min-height: 48px;
+    }
+
+    /* --- Login responsivo --- */
+    .login-box {
+        width: 90vw;
+        max-width: 400px;
+        padding: 28px 20px;
+        border-radius: 16px;
+    }
+
+    .logo-section h1 {
+        font-size: 18px;
+    }
+
+    .input-group input,
+    .input-group select {
+        padding: 12px 14px;
+        font-size: 14px;
+    }
+
+    /* --- Cards del sistema --- */
+    .cards {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+
+    .card {
+        padding: 14px 12px;
+    }
+
+    .card h3 {
+        font-size: 20px;
+    }
+
+    /* --- Asistencia --- */
     .asistencia-row {
+        display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 8px 12px;
+        gap: 8px 10px;
+        padding: 12px;
+        margin-bottom: 10px;
     }
 
     .asistencia-nombre {
         grid-column: span 2;
         font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+
+    .asistencia-row label {
+        font-size: 12px;
+        padding: 6px 8px;
+        cursor: pointer;
     }
 
     /* --- Ficha estudiante --- */
     .ficha-header {
-        padding: 18px 14px;
+        padding: 16px 12px;
         gap: 12px;
     }
 
     .ficha-avatar {
-        width: 52px;
-        height: 52px;
-        font-size: 22px;
+        width: 48px;
+        height: 48px;
+        font-size: 20px;
+        flex-shrink: 0;
     }
 
     .ficha-nombre {
-        font-size: 17px;
-        margin-bottom: 8px;
+        font-size: 15px;
+        margin-bottom: 4px;
     }
 
     .ficha-grid-2 {
@@ -1328,69 +1447,90 @@ body {
     }
 
     .ficha-section {
-        padding: 16px 14px;
+        padding: 14px 12px;
     }
 
     .ficha-promedio-badge {
         align-self: flex-start;
-        padding: 10px 14px;
-        min-width: 80px;
+        padding: 8px 12px;
+        min-width: 70px;
+        font-size: 13px;
     }
 
     .ficha-promedio-num {
-        font-size: 24px;
+        font-size: 22px;
     }
 
-    .ficha-campo span {
-        min-width: 90px;
-    }
-
-    /* --- Estadísticas asistencia: 2×2 --- */
+    /* --- Estadísticas asistencia --- */
     .asist-stats {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        flex-wrap: unset;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
     }
 
     .asist-stat {
         min-width: unset;
-    }
-
-    /* --- Formulario participaciones apilado --- */
-    .participacion-form {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .part-input-flex {
-        min-width: unset;
-        width: 100%;
-    }
-
-    .participacion-form .btn-primary {
-        width: 100%;
+        padding: 12px;
+        text-align: center;
+        border-radius: 8px;
     }
 
     /* --- Buscador avanzado --- */
     .filtro-select {
         width: 100%;
+        padding: 10px 12px;
+    }
+
+    .busqueda-barra {
+        flex-direction: column;
+        gap: 10px;
     }
 
     .busqueda-barra .btn-secondary {
         width: 100%;
+        padding: 12px 16px;
     }
 
     .btn-ver-ficha {
         width: 100%;
-        padding: 10px 14px;
+        padding: 10px 12px;
         font-size: 13px;
+        min-height: 44px;
+    }
+
+    /* --- Participaciones --- */
+    .participacion-form {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .part-input {
+        width: 100%;
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+
+    .participacion-row {
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+    }
+
+    /* --- Canvas responsive --- */
+    canvas {
+        max-width: 100% !important;
     }
 }
 
-/* ===================== RESPONSIVE MUY PEQUEÑO (420px) ===================== */
+/* ===================== RESPONSIVE MUY PEQUEÑO (480px) ===================== */
 
-@media (max-width: 420px) {
+@media (max-width: 480px) {
+    /* --- Dashboard KPIs: 1 columna en pantallas muy pequeñas --- */
+    .dashboard-kpis {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
     .cards {
         grid-template-columns: 1fr;
     }
@@ -1399,20 +1539,52 @@ body {
         flex-direction: row;
         text-align: left;
         align-items: center;
-        gap: 14px;
-        padding: 14px 12px;
+        gap: 12px;
+        padding: 12px;
     }
 
     .card-icon {
-        font-size: 24px;
+        font-size: 22px;
         margin-bottom: 0;
+        flex-shrink: 0;
     }
 
     .card h3 {
-        font-size: 22px;
+        font-size: 18px;
     }
 
     .topbar-user .user-badge {
         display: none;
+    }
+
+    .login-box {
+        width: 95vw;
+        padding: 24px 16px;
+    }
+
+    .panel {
+        padding: 12px 10px;
+    }
+
+    .asistencia-row {
+        grid-template-columns: 1fr;
+    }
+
+    .asistencia-nombre {
+        grid-column: span 1;
+    }
+
+    .asist-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .table-wrap .data-table {
+        min-width: 320px;
+        font-size: 11px;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 8px 6px;
     }
 }
