@@ -25,6 +25,153 @@ function parseFechaMySQL(fecha) {
 }
 
 // =============================================
+//  SISTEMA DE NOTIFICACIONES (TOAST)
+// =============================================
+function showToast(mensaje, tipo = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${tipo}`;
+    
+    const iconos = {
+        success: '✅',
+        error: '❌',
+        warning: '⚠️',
+        info: 'ℹ️'
+    };
+
+    toast.innerHTML = `
+        <span class="toast-icon">${iconos[tipo] || 'ℹ️'}</span>
+        <span class="toast-mensaje">${mensaje}</span>
+    `;
+
+    container.appendChild(toast);
+
+    // Trigger animation
+    setTimeout(() => toast.classList.add('show'), 10);
+
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// =============================================
+//  MODAL DE CONFIRMACIÓN
+// =============================================
+function showConfirm(mensaje, onConfirm, onCancel) {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'confirm-modal';
+    modal.innerHTML = `
+        <div class="confirm-content">
+            <p class="confirm-mensaje">${mensaje}</p>
+            <div class="confirm-actions">
+                <button class="btn-cancel">Cancelar</button>
+                <button class="btn-confirm">Confirmar</button>
+            </div>
+        </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Trigger animation
+    setTimeout(() => overlay.classList.add('show'), 10);
+
+    const btnCancel = modal.querySelector('.btn-cancel');
+    const btnConfirm = modal.querySelector('.btn-confirm');
+
+    function cerrar() {
+        overlay.classList.remove('show');
+        setTimeout(() => overlay.remove(), 300);
+    }
+
+    btnCancel.addEventListener('click', () => {
+        cerrar();
+        if (onCancel) onCancel();
+    });
+
+    btnConfirm.addEventListener('click', () => {
+        cerrar();
+        if (onConfirm) onConfirm();
+    });
+
+    // Cerrar con Escape
+    const handleEscape = (e) => {
+        if (e.key === 'Escape') {
+            cerrar();
+            document.removeEventListener('keydown', handleEscape);
+            if (onCancel) onCancel();
+        }
+    };
+    document.addEventListener('keydown', handleEscape);
+}
+
+// =============================================
+//  MODAL DE INPUT (Prompt elegante)
+// =============================================
+function showPrompt(mensaje, defaultValue = '') {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'confirm-overlay';
+
+        const modal = document.createElement('div');
+        modal.className = 'confirm-modal';
+        modal.innerHTML = `
+            <div class="confirm-content">
+                <p class="confirm-mensaje">${mensaje}</p>
+                <input type="text" id="prompt-input" class="prompt-input" value="${defaultValue}" placeholder="Escriba aquí...">
+                <div class="confirm-actions" style="margin-top: 20px;">
+                    <button class="btn-cancel">Cancelar</button>
+                    <button class="btn-confirm">Aceptar</button>
+                </div>
+            </div>
+        `;
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        // Trigger animation
+        setTimeout(() => overlay.classList.add('show'), 10);
+
+        const input = modal.querySelector('#prompt-input');
+        const btnCancel = modal.querySelector('.btn-cancel');
+        const btnConfirm = modal.querySelector('.btn-confirm');
+
+        function cerrar(valor) {
+            overlay.classList.remove('show');
+            setTimeout(() => {
+                overlay.remove();
+                resolve(valor);
+            }, 300);
+        }
+
+        input.focus();
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                cerrar(input.value || null);
+            }
+        });
+
+        btnCancel.addEventListener('click', () => cerrar(null));
+        btnConfirm.addEventListener('click', () => cerrar(input.value || null));
+
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                cerrar(null);
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+    });
+}
+
+// =============================================
 //  LOGIN
 // =============================================
 window.addEventListener("load", async function() {
@@ -355,7 +502,7 @@ document.getElementById("formEstudiante").addEventListener("submit", async funct
         const method = editandoEstudianteId ? "PUT" : "POST";
         const res    = await fetch(url, { method, headers:{"Content-Type":"application/json"}, body:JSON.stringify(datos) });
         const data   = await res.json();
-        if (!res.ok) { alert(data.error || "Error al guardar."); return; }
+        if (!res.ok) { showToast(data.error || "Error al guardar.", "error"); return; }
         cancelarEdicionEstudiante();
         this.reset();
         const msg = document.getElementById("msgEstudiante");
@@ -363,7 +510,7 @@ document.getElementById("formEstudiante").addEventListener("submit", async funct
         msg.style.display = "block";
         setTimeout(() => msg.style.display = "none", 3000);
         cargarTablaEstudiantes();
-    } catch (err) { alert("No se pudo conectar al servidor."); }
+    } catch (err) { showToast("No se pudo conectar al servidor.", "error"); }
 });
 
 function editarEstudiante(id) {
@@ -397,12 +544,18 @@ function cancelarEdicionEstudiante() {
 }
 
 async function eliminarEstudiante(id, nombre) {
-    if (!confirm(`Eliminar al estudiante "${nombre}"? Esta accion no se puede deshacer.`)) return;
+    showConfirm(`¿Está seguro que desea eliminar al estudiante "${nombre}"?`, () => {
+        fetch(`${API}/estudiantes/${id}`, { method:"DELETE" })
+        .then(res => { if (!res.ok) { showToast("Error al eliminar.", "error"); return; }
+        cargarTablaEstudiantes(); })
+        .catch(err => { showToast("No se pudo conectar al servidor.", "error"); });
+    }, () => {});
+    return;
     try {
         const res = await fetch(`${API}/estudiantes/${id}`, { method:"DELETE" });
-        if (!res.ok) { alert("Error al eliminar."); return; }
+        if (!res.ok) { showToast("Error al eliminar.", "error"); return; }
         cargarTablaEstudiantes();
-    } catch (err) { alert("No se pudo conectar al servidor."); }
+    } catch (err) { showToast("No se pudo conectar al servidor.", "error"); }
 }
 
 async function cargarTablaEstudiantes() {
@@ -509,13 +662,13 @@ document.getElementById("formCalificaciones").addEventListener("submit", async f
             method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(datos)
         });
         const data = await res.json();
-        if (!res.ok) { alert(data.error || "Error al guardar."); return; }
+        if (!res.ok) { showToast(data.error || "Error al guardar.", "error"); return; }
         this.reset();
         const msg = document.getElementById("msgCalificacion");
         msg.style.display = "block";
         setTimeout(() => msg.style.display = "none", 3000);
         cargarTablaCalificaciones();
-    } catch (err) { alert("No se pudo conectar al servidor."); }
+    } catch (err) { showToast("No se pudo conectar al servidor.", "error"); }
 });
 
 async function cargarTablaCalificaciones() {
@@ -655,7 +808,7 @@ async function guardarParticipacionesAula() {
     const aulaId = document.getElementById("selAulaParticipaciones")?.value;
     const fecha = document.getElementById("fechaParticipaciones")?.value;
     if (!aulaId || !fecha) {
-        alert("Seleccione aula y fecha antes de guardar.");
+        showToast("Seleccione aula y fecha antes de guardar.", "warning");
         return;
     }
     const filas = Array.from(document.querySelectorAll(".participacion-row"));
@@ -672,7 +825,7 @@ async function guardarParticipacionesAula() {
     }).filter(r => r.estudiante_id && (r.puntuacion > 0 || r.observacion));
 
     if (!registros.length) {
-        alert("Debe registrar al menos una puntuación o observación.");
+        showToast("Debe registrar al menos una puntuación o observación.", "warning");
         return;
     }
 
@@ -686,7 +839,7 @@ async function guardarParticipacionesAula() {
         const error = fallos.find(item => !item.ok);
         if (error) {
             console.error("Error guardando participaciones:", error);
-            alert(error.data?.error || "Ocurrió un error al guardar algunas participaciones.");
+            showToast(error.data?.error || "Ocurrió un error al guardar algunas participaciones.", "error");
             return;
         }
         const msg = document.getElementById("msgParticipaciones");
@@ -697,7 +850,7 @@ async function guardarParticipacionesAula() {
         cargarParticipacionesAula();
     } catch (err) {
         console.error("Error guardando participaciones:", err);
-        alert("No se pudo conectar al servidor.");
+        showToast("No se pudo conectar al servidor.", "error");
     }
 }
 
@@ -712,11 +865,11 @@ document.getElementById("btnGuardarAsistencia").addEventListener("click", async 
         const res = await fetch(`${API}/asistencia`, {
             method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({registros})
         });
-        if (!res.ok) { alert("Error al guardar asistencia."); return; }
+        if (!res.ok) { showToast("Error al guardar asistencia.", "error"); return; }
         const msg = document.getElementById("msgAsistencia");
         msg.style.display = "block";
         setTimeout(() => msg.style.display = "none", 3000);
-    } catch (err) { alert("No se pudo conectar al servidor."); }
+    } catch (err) { showToast("No se pudo conectar al servidor.", "error"); }
 });
 
 document.getElementById("btnGuardarParticipaciones")?.addEventListener("click", async function() {
@@ -800,7 +953,7 @@ function exportar(formato, tipo) {
 
 function exportarBoletin(formato, estudianteId) {
     if (!estudianteId) {
-        alert("Debe seleccionar un estudiante.");
+        showToast("Debe seleccionar un estudiante.", "warning");
         return;
     }
     window.open(`${API}/exportar/boletin/${formato}/${estudianteId}`, "_blank");
@@ -822,13 +975,13 @@ document.getElementById("formUsuario").addEventListener("submit", async function
             method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(datos)
         });
         const data = await res.json();
-        if (!res.ok) { alert(data.error || "Error al crear usuario."); return; }
+        if (!res.ok) { showToast(data.error || "Error al crear usuario.", "error"); return; }
         this.reset();
         const msg = document.getElementById("msgUsuario");
         msg.style.display = "block";
         setTimeout(() => msg.style.display = "none", 3000);
         cargarTablaUsuarios();
-    } catch (err) { alert("No se pudo conectar al servidor."); }
+    } catch (err) { showToast("No se pudo conectar al servidor.", "error"); }
 });
 
 async function cargarTablaUsuarios() {
@@ -851,12 +1004,18 @@ async function cargarTablaUsuarios() {
 }
 
 async function eliminarUsuario(id, nombre) {
-    if (!confirm(`Eliminar al usuario "${nombre}"? Esta accion no se puede deshacer.`)) return;
+    showConfirm(`¿Está seguro que desea eliminar al usuario "${nombre}"?`, () => {
+        fetch(`${API}/usuarios/${id}`, { method:"DELETE" })
+        .then(res => { if (!res.ok) { showToast("Error al eliminar.", "error"); return; }
+        cargarTablaUsuarios(); })
+        .catch(err => { showToast("No se pudo conectar al servidor.", "error"); });
+    }, () => {});
+    return;
     try {
         const res = await fetch(`${API}/usuarios/${id}`, { method:"DELETE" });
-        if (!res.ok) { alert("Error al eliminar."); return; }
+        if (!res.ok) { showToast("Error al eliminar.", "error"); return; }
         cargarTablaUsuarios();
-    } catch (err) { alert("No se pudo conectar al servidor."); }
+    } catch (err) { showToast("No se pudo conectar al servidor.", "error"); }
 }
 
 // =============================================
@@ -892,12 +1051,12 @@ document.getElementById("formConfiguracion").addEventListener("submit", async fu
             method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(datos)
         });
         const data = await res.json();
-        if (!res.ok) { alert(data.error || "Error al guardar."); return; }
+        if (!res.ok) { showToast(data.error || "Error al guardar.", "error"); return; }
         const msg = document.getElementById("msgConfiguracion");
         msg.style.display = "block";
         setTimeout(() => msg.style.display = "none", 3000);
         cargarNombreCentro();
-    } catch (err) { alert("No se pudo conectar al servidor."); }
+    } catch (err) { showToast("No se pudo conectar al servidor.", "error"); }
 });
 
 // =============================================
@@ -1147,7 +1306,7 @@ async function agregarParticipacion(estudianteId) {
     const fecha       = document.getElementById("part-fecha").value;
     const puntuacion  = parseInt(document.getElementById("part-score").value || "", 10);
     const observacion = document.getElementById("part-desc").value.trim();
-    if (!fecha) { alert("Seleccione una fecha."); return; }
+    if (!fecha) { showToast("Seleccione una fecha.", "warning"); return; }
     try {
         const res = await fetch(`${API}/participaciones`, {
             method:"POST", headers:{"Content-Type":"application/json"},
@@ -1158,11 +1317,11 @@ async function agregarParticipacion(estudianteId) {
                 observacion
             })
         });
-        if (!res.ok) { alert("Error al guardar participacion."); return; }
+        if (!res.ok) { showToast("Error al guardar participacion.", "error"); return; }
         document.getElementById("part-desc").value = "";
         document.getElementById("part-score").value = "";
         mostrarFichaEstudiante(estudianteId);
-    } catch (err) { alert("No se pudo conectar al servidor."); }
+    } catch (err) { showToast("No se pudo conectar al servidor.", "error"); }
 }
 
 // =============================================
@@ -1224,7 +1383,7 @@ document.getElementById("formAula")?.addEventListener("submit", async function(e
     const anioEscolar = document.getElementById("cfg-anio")?.value.trim() || null;
 
     if (!grado || !seccion) {
-        alert("Grado y sección son obligatorios.");
+        showToast("Grado y sección son obligatorios.", "warning");
         return;
     }
 
@@ -1249,7 +1408,7 @@ document.getElementById("formAula")?.addEventListener("submit", async function(e
         });
         const data = await res.json();
 
-        if (!res.ok) { alert(data.error || "Error al guardar aula."); return; }
+        if (!res.ok) { showToast(data.error || "Error al guardar aula.", "error"); return; }
 
         this.reset();
         cancelarEdicionAula();
@@ -1262,7 +1421,7 @@ document.getElementById("formAula")?.addEventListener("submit", async function(e
         }
 
         cargarTablaAulas();
-    } catch (err) { alert("No se pudo conectar al servidor."); }
+    } catch (err) { showToast("No se pudo conectar al servidor.", "error"); }
 });
 
 async function editarAula(id) {
@@ -1296,12 +1455,18 @@ function cancelarEdicionAula() {
 document.getElementById("btnCancelarAula")?.addEventListener("click", cancelarEdicionAula);
 
 async function eliminarAula(id, nombre) {
-    if (!confirm(`¿Eliminar aula "${nombre}"?`)) return;
+    showConfirm(`¿Está seguro que desea eliminar el aula "${nombre}"?`, () => {
+        fetch(`${API}/aulas/${id}`, { method: "DELETE" })
+        .then(res => { if (!res.ok) { showToast("Error al eliminar.", "error"); return; }
+        cargarTablaAulas(); })
+        .catch(err => { showToast("No se pudo conectar.", "error"); });
+    }, () => {});
+    return;
     try {
         const res = await fetch(`${API}/aulas/${id}`, { method: "DELETE" });
-        if (!res.ok) { alert("Error al eliminar."); return; }
+        if (!res.ok) { showToast("Error al eliminar.", "error"); return; }
         cargarTablaAulas();
-    } catch (err) { alert("No se pudo conectar."); }
+    } catch (err) { showToast("No se pudo conectar.", "error"); }
 }
 
 async function verDetalleAula(aulaId) {
@@ -1382,10 +1547,10 @@ async function verDetalleAula(aulaId) {
 }
 
 async function mostrarFormAgregarAsignacion(aulaId) {
-    const asignatura = prompt("Ingresa la asignatura (Ej: Matemáticas, Español, Ciencias):");
+    const asignatura = await showPrompt("Ingresa la asignatura (Ej: Matemáticas, Español, Ciencias):");
     if (!asignatura || !asignatura.trim()) return;
 
-    const maestroId = prompt("ID del maestro (usa la lista de maestros registrados):");
+    const maestroId = await showPrompt("ID del maestro (usa la lista de maestros registrados):");
     if (!maestroId) return;
 
     try {
@@ -1400,19 +1565,25 @@ async function mostrarFormAgregarAsignacion(aulaId) {
         });
         const data = await res.json();
 
-        if (!res.ok) { alert(data.error || "Error al asignar."); return; }
-        alert("Asignación agregada exitosamente.");
+        if (!res.ok) { showToast(data.error || "Error al asignar.", "error"); return; }
+        showToast("Asignación agregada exitosamente.", "success");
         verDetalleAula(aulaId);
-    } catch (err) { alert("Error de conexión."); }
+    } catch (err) { showToast("Error de conexión.", "error"); }
 }
 
 async function eliminarAsignacion(id, aulaId) {
-    if (!confirm("¿Quitar esta asignación?")) return;
+    showConfirm("¿Está seguro que desea quitar esta asignación?", () => {
+        fetch(`${API}/asignaciones/${id}`, { method: "DELETE" })
+        .then(res => { if (!res.ok) { showToast("Error.", "error"); return; }
+        verDetalleAula(aulaId); })
+        .catch(err => { showToast("Error de conexión.", "error"); });
+    }, () => {});
+    return;
     try {
         const res = await fetch(`${API}/asignaciones/${id}`, { method: "DELETE" });
-        if (!res.ok) { alert("Error"); return; }
+        if (!res.ok) { showToast("Error.", "error"); return; }
         verDetalleAula(aulaId);
-    } catch (err) { alert("Error de conexión."); }
+    } catch (err) { showToast("Error de conexión.", "error"); }
 }
 
 // Listener para el nav item Aulas
