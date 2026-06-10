@@ -105,13 +105,14 @@ function aplicarPermisos(rol) {
 
 function aplicarVistaRol(rol) {
     const navItems = document.querySelectorAll('.nav-item');
+    const busquedaLink = document.querySelector('[data-section="busqueda"]');
     
     // Roles que ven el menú completo
     const rolesCompletos = ['admin', 'director', 'coordinador', 'secretaria'];
     
-    // Si es rol docente, mostrar solo las 4 secciones permitidas
+    // Si es rol docente, mostrar solo las 3 secciones permitidas
     if (rol === 'docente') {
-        const seccionesDocente = ['asistencia', 'calificaciones'];
+        const seccionesDocente = ['busqueda', 'asistencia', 'calificaciones'];
         navItems.forEach(item => {
             const seccion = item.getAttribute('data-section');
             if (seccionesDocente.includes(seccion)) {
@@ -120,11 +121,19 @@ function aplicarVistaRol(rol) {
                 item.style.display = 'none';
             }
         });
+        // Renombrar Buscador a "Mis Estudiantes" para docentes
+        if (busquedaLink) {
+            busquedaLink.innerHTML = '<span class="nav-icon">&#128100;</span> Mis Estudiantes';
+        }
     } else if (rolesCompletos.includes(rol)) {
         // Mostrar todas las secciones para roles admin, director, coordinador, secretaria
         navItems.forEach(item => {
             item.style.display = 'flex';
         });
+        // Restaurar texto original para no-docentes
+        if (busquedaLink) {
+            busquedaLink.innerHTML = '<span class="nav-icon">&#128269;</span> Buscador';
+        }
     }
 }
 
