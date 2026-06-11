@@ -17,6 +17,7 @@ let aulaSeleccionada = null;
 let maestrosCache = [];
 let editandoAulaId = null;
 let chartPromedioGrado = null;
+let mostrarTodosEstudiantes = false;
 
 function parseFechaMySQL(fecha) {
     if (!fecha) return null;
@@ -222,13 +223,12 @@ document.getElementById("loginForm").addEventListener("submit", async function(e
         aplicarVistaRol(data.usuario.rol);
         cargarNombreCentro();
         
-        // Para docentes, mostrar pantalla de selección de aula
         if (data.usuario.rol === "docente") {
             await cargarAulasDocente(data.usuario.id);
-            mostrarSeleccionAula();
-        } else {
-            mostrarSeccion("inicio");
         }
+        mostrarSeccion("inicio");
+        document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+        document.querySelector('[data-section="inicio"]')?.classList.add("active");
 
     } catch (err) {
         errorDiv.textContent   = "No se pudo conectar al servidor. Esta corriendo Node.js?";
@@ -260,34 +260,22 @@ function aplicarPermisos(rol) {
 function aplicarVistaRol(rol) {
     const navItems = document.querySelectorAll('.nav-item');
     const busquedaLink = document.querySelector('[data-section="busqueda"]');
-    
-    // Roles que ven el menú completo
-    const rolesCompletos = ['admin', 'director', 'coordinador', 'secretaria'];
-    
-    // Si es rol docente, mostrar solo las 3 secciones permitidas
+
     if (rol === 'docente') {
-        const seccionesDocente = ['busqueda', 'asistencia', 'calificaciones'];
+        const seccionesDocente = ['inicio', 'busqueda', 'asistencia', 'calificaciones', 'participaciones'];
         navItems.forEach(item => {
             const seccion = item.getAttribute('data-section');
-            if (seccionesDocente.includes(seccion)) {
-                item.style.display = 'flex';
-            } else {
-                item.style.display = 'none';
-            }
+            item.style.display = seccionesDocente.includes(seccion) ? 'flex' : 'none';
         });
-        // Renombrar Buscador a "Mis Estudiantes" para docentes
-        if (busquedaLink) {
-            busquedaLink.innerHTML = '<span class="nav-icon">&#128100;</span> Mis Estudiantes';
-        }
-    } else if (rolesCompletos.includes(rol)) {
-        // Mostrar todas las secciones para roles admin, director, coordinador, secretaria
-        navItems.forEach(item => {
-            item.style.display = 'flex';
-        });
-        // Restaurar texto original para no-docentes
-        if (busquedaLink) {
-            busquedaLink.innerHTML = '<span class="nav-icon">&#128269;</span> Buscador';
-        }
+        if (busquedaLink) busquedaLink.innerHTML = '<span class="nav-icon">📋</span> Mis Estudiantes';
+        // Ocultar filtros de grado/sección en buscador para docentes
+        const filtrosAvanzados = document.getElementById('filtros-avanzados');
+        if (filtrosAvanzados) filtrosAvanzados.style.display = 'none';
+    } else {
+        navItems.forEach(item => { item.style.display = 'flex'; });
+        if (busquedaLink) busquedaLink.innerHTML = '<span class="nav-icon">&#128269;</span> Buscador';
+        const filtrosAvanzados = document.getElementById('filtros-avanzados');
+        if (filtrosAvanzados) filtrosAvanzados.style.display = '';
     }
 }
 
@@ -354,27 +342,47 @@ document.querySelectorAll(".nav-item").forEach(function(item) {
 });
 
 function mostrarSeccion(nombre) {
+    // "participaciones" no tiene sección propia, usa sec-asistencia
+    const seccionReal = nombre === "participaciones" ? "asistencia" : nombre;
     document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
-    const sec = document.getElementById("sec-" + nombre);
+    const sec = document.getElementById("sec-" + seccionReal);
     if (sec) sec.classList.add("active");
 
+    const rol = localStorage.getItem('userRol') || (usuarioActual && usuarioActual.rol);
     const titulos = {
-        inicio:"Panel Principal", estudiantes:"Registro de Estudiantes",
-        busqueda:"Buscador Avanzado",
-        calificaciones:"Registro de Calificaciones", asistencia:"Control de Asistencia",
-        reportes:"Reportes Academicos", usuarios:"Gestion de Usuarios",
-        configuracion:"Configuracion Institucional"
+        inicio: "Panel Principal",
+        estudiantes: "Registro de Estudiantes",
+        busqueda: rol === 'docente' ? "Mis Estudiantes" : "Buscador Avanzado",
+        calificaciones: "Registro de Calificaciones",
+        asistencia: "Control de Asistencia",
+        participaciones: "Participaciones",
+        reportes: "Reportes Academicos",
+        usuarios: "Gestion de Usuarios",
+        configuracion: "Configuracion Institucional"
     };
     document.getElementById("sectionTitle").textContent = titulos[nombre] || "";
 
     if (nombre === "inicio") {
-        cargarDashboard();
-        setTimeout(initGraficas, 500);
+        if (rol === 'docente') {
+            const panelDocente = document.getElementById('docente-aulas-panel');
+            const panelAdmin = document.getElementById('admin-dashboard-panel');
+            if (panelDocente) panelDocente.style.display = '';
+            if (panelAdmin) panelAdmin.style.display = 'none';
+            renderizarPanelDocente();
+        } else {
+            const panelDocente = document.getElementById('docente-aulas-panel');
+            const panelAdmin = document.getElementById('admin-dashboard-panel');
+            if (panelDocente) panelDocente.style.display = 'none';
+            if (panelAdmin) panelAdmin.style.display = '';
+            cargarDashboard();
+            setTimeout(initGraficas, 500);
+        }
     }
     if (nombre === "estudiantes")    cargarTablaEstudiantes();
     if (nombre === "busqueda")       iniciarBusqueda();
     if (nombre === "calificaciones") cargarSelectEstudiantes();
     if (nombre === "asistencia")     cargarAsistencia();
+    if (nombre === "participaciones") cargarAsistencia().then(() => seleccionarTabAsistencia('participaciones'));
     if (nombre === "usuarios")       cargarTablaUsuarios();
     if (nombre === "configuracion")  cargarConfiguracion();
 }
@@ -1102,52 +1110,60 @@ let fichaActualId       = null;
 let busquedaInicializada = false;
 
 function iniciarBusqueda() {
-    if (busquedaInicializada) { buscarEstudiantes(); return; }
-    busquedaInicializada = true;
-    document.getElementById("busqueda-input").addEventListener("input", function() {
-        clearTimeout(busquedaTimeout);
-        busquedaTimeout = setTimeout(buscarEstudiantes, 350);
-    });
-    document.getElementById("filtro-grado").addEventListener("change", buscarEstudiantes);
-    document.getElementById("filtro-seccion").addEventListener("change", buscarEstudiantes);
+    if (!busquedaInicializada) {
+        busquedaInicializada = true;
+        document.getElementById("busqueda-input").addEventListener("input", function() {
+            clearTimeout(busquedaTimeout);
+            busquedaTimeout = setTimeout(buscarEstudiantes, 350);
+        });
+        document.getElementById("filtro-grado").addEventListener("change", buscarEstudiantes);
+        document.getElementById("filtro-seccion").addEventListener("change", buscarEstudiantes);
+    }
+    const rol = localStorage.getItem('userRol') || (usuarioActual && usuarioActual.rol);
+    if (rol === 'docente') {
+        mostrarTodosEstudiantes = false;
+        actualizarBannerDocente();
+    }
     buscarEstudiantes();
 }
 
 async function buscarEstudiantes() {
-    const q       = document.getElementById("busqueda-input").value.trim();
-    const grado   = document.getElementById("filtro-grado").value;
-    const seccion = document.getElementById("filtro-seccion").value;
-    const params  = new URLSearchParams();
-    if (q)       params.set("q", q);
-    if (grado)   params.set("grado", grado);
-    if (seccion) params.set("seccion", seccion);
+    const q = document.getElementById("busqueda-input").value.trim();
+    const rol = localStorage.getItem('userRol') || (usuarioActual && usuarioActual.rol);
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+
+    if (rol !== 'docente') {
+        const grado   = document.getElementById("filtro-grado").value;
+        const seccion = document.getElementById("filtro-seccion").value;
+        if (grado)   params.set("grado", grado);
+        if (seccion) params.set("seccion", seccion);
+    }
 
     const contenedor = document.getElementById("busqueda-resultados");
     contenedor.innerHTML = '<p style="color:#888;padding:12px 0">Buscando...</p>';
     try {
-        const res  = await fetch(`${API}/estudiantes/buscar?${params.toString()}`);
+        const res = await fetch(`${API}/estudiantes/buscar?${params.toString()}`);
         let data = await res.json();
         if (!res.ok) {
             contenedor.innerHTML = '<p class="empty-row">Error del servidor: ' + (data.detalle || data.error || res.status) + '</p>';
             return;
         }
-        if (!Array.isArray(data) || data.length === 0) {
+        if (!Array.isArray(data)) { contenedor.innerHTML = '<p class="empty-row">No se encontraron estudiantes.</p>'; return; }
+
+        // Para docentes con aula activa y sin "ver todos": filtrar solo ese aula
+        if (rol === 'docente' && aulaSeleccionada && !mostrarTodosEstudiantes) {
+            const aulaId = String(aulaSeleccionada.id);
+            data = data.filter(e => String(e.aula_id) === aulaId);
+        }
+
+        if (data.length === 0) {
             contenedor.innerHTML = '<p class="empty-row">No se encontraron estudiantes.</p>';
             return;
         }
 
-        // Para docentes: mostrar primero los del aula activa
-        if (aulaSeleccionada) {
-            const aulaId = String(aulaSeleccionada.id);
-            data = [
-                ...data.filter(e => String(e.aula_id) === aulaId),
-                ...data.filter(e => String(e.aula_id) !== aulaId)
-            ];
-        }
-
-        const aulaActivaId = aulaSeleccionada ? String(aulaSeleccionada.id) : null;
         contenedor.innerHTML = `
-            <p style="color:#888;font-size:13px;margin-bottom:12px">${data.length} estudiante(s) encontrado(s)${aulaSeleccionada ? ' · Los del aula activa aparecen primero' : ''}</p>
+            <p style="color:#888;font-size:13px;margin-bottom:12px">${data.length} estudiante(s) encontrado(s)</p>
             <div style="overflow-x:auto">
             <table class="data-table">
                 <thead><tr>
@@ -1156,10 +1172,9 @@ async function buscarEstudiantes() {
                 </tr></thead>
                 <tbody>
                     ${data.map(function(e, i) {
-                        const esDeAula = aulaActivaId && String(e.aula_id) === aulaActivaId;
-                        return `<tr${esDeAula ? ' style="background:#f0f7ff"' : ''}>
+                        return `<tr>
                             <td>${i + 1}</td>
-                            <td><strong>${e.nombre}</strong>${esDeAula ? ' <span style="background:#1565c0;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">Mi aula</span>' : ''}</td>
+                            <td><strong>${e.nombre}</strong></td>
                             <td>${e.matricula}</td>
                             <td>${e.cedula || "—"}</td>
                             <td>${e.grado}</td>
@@ -1176,10 +1191,16 @@ async function buscarEstudiantes() {
 }
 
 function limpiarBusqueda() {
-    document.getElementById("busqueda-input").value  = "";
-    document.getElementById("filtro-grado").value    = "";
-    document.getElementById("filtro-seccion").value  = "";
+    document.getElementById("busqueda-input").value = "";
     document.getElementById("ficha-contenedor").innerHTML = "";
+    const rol = localStorage.getItem('userRol') || (usuarioActual && usuarioActual.rol);
+    if (rol !== 'docente') {
+        document.getElementById("filtro-grado").value   = "";
+        document.getElementById("filtro-seccion").value = "";
+    } else {
+        mostrarTodosEstudiantes = false;
+        actualizarBannerDocente();
+    }
     buscarEstudiantes();
 }
 
@@ -1659,20 +1680,22 @@ async function cargarAulasDocente(usuarioId) {
 }
 
 function mostrarSeleccionAula() {
-    document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
-    const sec = document.getElementById("sec-seleccion-aula");
-    if (sec) sec.classList.add("active");
+    irPanelPrincipal();
+}
 
-    document.getElementById("sectionTitle").textContent = "Selección de Aula";
-    document.getElementById("welcomeMsg").textContent   = "";
+function irPanelPrincipal() {
+    mostrarSeccion("inicio");
     document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+    document.querySelector('[data-section="inicio"]')?.classList.add("active");
+}
+
+function renderizarPanelDocente() {
+    const grid = document.getElementById("aulasGridInicio");
+    if (!grid) return;
 
     const nombre = usuarioActual?.nombre || document.getElementById("userNameDisplay").textContent || "Docente";
-    const titulo = document.getElementById("seleccionTitulo");
+    const titulo = document.getElementById("panelDocenteTitulo");
     if (titulo) titulo.textContent = `Bienvenido/a, ${nombre}`;
-
-    const grid = document.getElementById("aulasGrid");
-    if (!grid) return;
 
     if (aulasDocente.length === 0) {
         grid.innerHTML = `
@@ -1685,14 +1708,41 @@ function mostrarSeleccionAula() {
     }
 
     grid.innerHTML = aulasDocente.map(aula => `
-        <div class="aula-card" onclick="seleccionarAula(${aula.id})">
+        <div class="aula-card">
             <div class="aula-card-icon">🏫</div>
             <div class="aula-card-grado">${aula.grado}</div>
             <div class="aula-card-seccion">Sección ${aula.seccion}</div>
             <div class="aula-card-nombre">${aula.aula_numero || aula.grado + ' - ' + aula.seccion}</div>
             <div class="aula-card-estudiantes">${aula.cantidad_estudiantes || 0} estudiantes</div>
+            <button onclick="seleccionarAula(${aula.id})" style="margin-top:16px;padding:10px 0;background:#1565c0;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;width:100%">Entrar</button>
         </div>
     `).join("");
+}
+
+function actualizarBannerDocente() {
+    const banner = document.getElementById("docente-busqueda-banner");
+    const btnVer = document.getElementById("btnVerTodosEstudiantes");
+    const info = document.getElementById("docente-busqueda-info");
+    if (!banner) return;
+    if (aulaSeleccionada) {
+        banner.style.display = 'flex';
+        const nombre = aulaSeleccionada.aula_numero || (aulaSeleccionada.grado + ' ' + aulaSeleccionada.seccion);
+        if (mostrarTodosEstudiantes) {
+            if (info) info.textContent = 'Mostrando todos los estudiantes';
+            if (btnVer) btnVer.textContent = 'Volver al aula';
+        } else {
+            if (info) info.textContent = `Mostrando estudiantes de: ${nombre}`;
+            if (btnVer) btnVer.textContent = 'Ver todos los estudiantes';
+        }
+    } else {
+        banner.style.display = 'none';
+    }
+}
+
+function toggleVerTodosEstudiantes() {
+    mostrarTodosEstudiantes = !mostrarTodosEstudiantes;
+    actualizarBannerDocente();
+    buscarEstudiantes();
 }
 
 function seleccionarAula(aulaId) {

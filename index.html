@@ -51,7 +51,7 @@
         </div>
         <nav class="sidebar-nav">
             <a href="#" class="nav-item active" data-section="inicio">
-                <span class="nav-icon">&#128202;</span> Panel Principal
+                <span class="nav-icon">🏠</span> Panel Principal
             </a>
             <a href="#" class="nav-item" data-section="estudiantes">
                 <span class="nav-icon">&#128100;</span> Estudiantes
@@ -64,6 +64,9 @@
             </a>
             <a href="#" class="nav-item" data-section="asistencia">
                 <span class="nav-icon">&#128197;</span> Asistencia
+            </a>
+            <a href="#" class="nav-item" data-section="participaciones">
+                <span class="nav-icon">⭐</span> Participaciones
             </a>
             <a href="#" class="nav-item" data-section="reportes">
                 <span class="nav-icon">&#128196;</span> Reportes
@@ -91,8 +94,9 @@
                 </div>
             </div>
             <div class="topbar-user">
-                <span id="aulaActivaBadge" style="display: none; background: #1565c0; color: white; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; margin-right: 12px; cursor: pointer;" onclick="mostrarSeleccionAula()" title="Cambiar aula">
-                    Aula: <span id="aulaActivaNombre">-</span> ✏️
+                <span id="aulaActivaBadge" style="display: none; background: #1565c0; color: white; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; margin-right: 12px; align-items: center; gap: 8px;">
+                    📚 Aula activa: <span id="aulaActivaNombre">-</span>
+                    <button onclick="irPanelPrincipal()" style="background:rgba(255,255,255,0.25);color:#fff;border:none;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px">Cambiar aula</button>
                 </span>
                 <span class="user-badge" id="userRolBadge">Director</span>
                 <span id="userNameDisplay">admin</span>
@@ -117,6 +121,21 @@
 
         <!-- INICIO -->
         <section id="sec-inicio" class="section active">
+            <!-- PANEL PRINCIPAL DEL DOCENTE (solo visible para docentes) -->
+            <div id="docente-aulas-panel" style="display:none">
+                <div style="margin-bottom:24px">
+                    <h2 id="panelDocenteTitulo" style="font-size:22px;font-weight:700;color:#0d2352;margin:0 0 6px 0">Mis Aulas</h2>
+                    <p style="color:#666;font-size:14px;margin:0">Selecciona un aula para comenzar a trabajar</p>
+                </div>
+                <div class="aulas-grid" id="aulasGridInicio">
+                    <div style="grid-column:1/-1;text-align:center;padding:40px">
+                        <p style="color:#888;font-size:16px">Cargando aulas...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PANEL ADMIN (dashboard para roles no-docente) -->
+            <div id="admin-dashboard-panel">
             <!-- SECCIÓN 1: KPIS (Solo 4 tarjetas) -->
             <div class="dashboard-kpis">
                 <div class="kpi-card kpi-estudiantes">
@@ -180,6 +199,7 @@
                     </tbody>
                 </table></div>
             </div>
+            </div><!-- /admin-dashboard-panel -->
         </section>
 
         <!-- ESTUDIANTES -->
@@ -245,7 +265,7 @@
                         <input type="text" id="busqueda-input" class="busqueda-input"
                                placeholder="Buscar por nombre, cedula o matricula...">
                     </div>
-                    <div class="filtros-fila">
+                    <div class="filtros-fila" id="filtros-avanzados">
                         <select id="filtro-grado" class="filtro-select">
                             <option value="">Todos los grados</option>
                             <option>1ro</option><option>2do</option><option>3ro</option>
@@ -256,6 +276,13 @@
                             <option>A</option><option>B</option><option>C</option><option>D</option>
                         </select>
                         <button onclick="limpiarBusqueda()" class="btn-secondary" style="padding:10px 20px;font-size:14px;width:auto">Limpiar</button>
+                    </div>
+                </div>
+                <div id="docente-busqueda-banner" style="display:none; margin-top:10px; padding:10px 16px; background:#e3f2fd; border-radius:8px; font-size:13px; color:#1565c0; align-items:center; justify-content:space-between; gap:12px;">
+                    <span id="docente-busqueda-info">Mostrando estudiantes del aula activa</span>
+                    <div style="display:flex;gap:8px">
+                        <button onclick="limpiarBusqueda()" style="background:transparent;color:#1565c0;border:1px solid #1565c0;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer">Limpiar</button>
+                        <button id="btnVerTodosEstudiantes" onclick="toggleVerTodosEstudiantes()" style="background:#1565c0;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">Ver todos los estudiantes</button>
                     </div>
                 </div>
                 <div id="busqueda-resultados"></div>
