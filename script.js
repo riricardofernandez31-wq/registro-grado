@@ -752,10 +752,12 @@ async function cargarAsistencia() {
                 <div class="asistencia-row">
                     <span class="asistencia-orden">${est.orden || '—'}</span>
                     <span class="asistencia-nombre">${est.nombre}</span>
-                    <label><input type="radio" name="as-${est.id}" value="presente" checked> Presente</label>
-                    <label><input type="radio" name="as-${est.id}" value="ausente"> Ausente</label>
-                    <label><input type="radio" name="as-${est.id}" value="tardanza"> Tardanza</label>
-                    <label><input type="radio" name="as-${est.id}" value="excusa"> Excusa</label>
+                    <div class="asistencia-opciones">
+                        <label><input type="radio" name="as-${est.id}" value="presente" checked> Presente</label>
+                        <label><input type="radio" name="as-${est.id}" value="ausente"> Ausente</label>
+                        <label><input type="radio" name="as-${est.id}" value="tardanza"> Tardanza</label>
+                        <label><input type="radio" name="as-${est.id}" value="excusa"> Excusa</label>
+                    </div>
                 </div>`).join("");
         }
 
@@ -946,7 +948,7 @@ async function generarReporte(tipo) {
             const res = await fetch(`${API}/calificaciones`);
             data = await res.json();
             titulo = "Reporte de Calificaciones";
-            columnas = ["Estudiante","Asignatura","Nota 1","Nota 2","Nota 3","Nota 4","Promedio"];
+            columnas = ["Estudiante","Asignatura","P1","P2","P3","P4","Promedio"];
             filas = data.map(c =>
                 `<tr><td>${c.nombre_estudiante}</td><td>${c.asignatura}</td><td>${c.nota1 ?? '—'}</td><td>${c.nota2 ?? '—'}</td><td>${c.nota3 ?? '—'}</td><td>${c.nota4 ?? '—'}</td><td><strong>${c.promedio ?? '—'}</strong></td></tr>`
             ).join("");
@@ -1155,10 +1157,13 @@ async function buscarEstudiantes() {
         }
         if (!Array.isArray(data)) { contenedor.innerHTML = '<p class="empty-row">No se encontraron estudiantes.</p>'; return; }
 
-        // Para docentes con aula activa y sin "ver todos": filtrar solo ese aula
-        if (rol === 'docente' && aulaSeleccionada && !mostrarTodosEstudiantes) {
-            const aulaId = String(aulaSeleccionada.id);
-            data = data.filter(e => String(e.aula_id) === aulaId);
+        if (rol === 'docente') {
+            if (!mostrarTodosEstudiantes && aulaSeleccionada) {
+                data = data.filter(e => String(e.aula_id) === String(aulaSeleccionada.id));
+            } else if (mostrarTodosEstudiantes) {
+                const misAulaIds = aulasDocente.map(a => String(a.id));
+                data = data.filter(e => misAulaIds.includes(String(e.aula_id)));
+            }
         }
 
         if (data.length === 0) {
@@ -1237,7 +1242,7 @@ async function mostrarFichaEstudiante(id) {
         const califsHTML = califs.length === 0
             ? '<p class="empty-row">Sin calificaciones registradas.</p>'
             : '<div style="overflow-x:auto"><table class="data-table">'
-              + '<thead><tr><th>Asignatura</th><th>Nota 1</th><th>Nota 2</th><th>Nota 3</th><th>Nota 4</th><th>Promedio</th><th>Estado</th></tr></thead><tbody>'
+              + '<thead><tr><th>Asignatura</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>Promedio</th><th>Estado</th></tr></thead><tbody>'
               + califs.map(function(c) {
                     const prom    = parseFloat(c.promedio);
                     const estado = isNaN(prom) ? "—" : prom >= 70
@@ -1551,12 +1556,18 @@ async function verDetalleAula(aulaId) {
         const aula = aulasCache.find(a => a.id === aulaId);
         if (!aula) return;
 
-        const resEst = await fetch(`${API}/estudiantes`);
+        const [resEst, resAsign, resMaestros] = await Promise.all([
+            fetch(`${API}/estudiantes`),
+            fetch(`${API}/asignaciones/aula/${aulaId}`),
+            fetch(`${API}/maestros/para-asignaciones`)
+        ]);
         const todosEstudiantes = await resEst.json();
         const estudiantes = todosEstudiantes.filter(e => e.aula_id === aulaId && e.activo === 1);
-
-        const resAsign = await fetch(`${API}/asignaciones/aula/${aulaId}`);
         const asignaciones = await resAsign.json();
+        const maestrosLista = resMaestros.ok ? await resMaestros.json() : [];
+        const opcionesMaestros = maestrosLista.map(m =>
+            `<option value="${m.id}">${m.nombre}${m.especialidad ? ' — ' + m.especialidad : ''}</option>`
+        ).join("");
 
         let html = `
             <div class="ficha-estudiante" style="margin-top:20px;background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.06)">
@@ -1596,7 +1607,22 @@ async function verDetalleAula(aulaId) {
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
                             <h4 style="font-size:13px;font-weight:700;color:#0d2352;text-transform:uppercase;margin:0;padding-bottom:8px;border-bottom:2px solid #f0f4fa;flex:1">Asignaturas y Maestros</h4>
                         </div>
-                        <button onclick="mostrarFormAgregarAsignacion(${aulaId})" style="background:linear-gradient(135deg,#0d47a1,#1976d2);color:#fff;border:none;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:600;margin-bottom:12px;font-size:13px">+ Agregar Asignación</button>
+                        <div style="background:#f0f4fa;border-radius:8px;padding:14px;margin-bottom:14px">
+                            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+                                <div style="flex:1;min-width:150px">
+                                    <label style="font-size:11px;font-weight:700;color:#0d2352;display:block;margin-bottom:4px;text-transform:uppercase">Materia</label>
+                                    <input type="text" id="input-asignatura-${aulaId}" placeholder="Ej: Matemáticas" style="width:100%;padding:8px 10px;border:1px solid #c5d3e8;border-radius:6px;font-size:13px;box-sizing:border-box">
+                                </div>
+                                <div style="flex:1;min-width:180px">
+                                    <label style="font-size:11px;font-weight:700;color:#0d2352;display:block;margin-bottom:4px;text-transform:uppercase">Maestro</label>
+                                    <select id="sel-maestro-${aulaId}" style="width:100%;padding:8px 10px;border:1px solid #c5d3e8;border-radius:6px;font-size:13px;background:#fff;box-sizing:border-box">
+                                        <option value="">Seleccione maestro</option>
+                                        ${opcionesMaestros}
+                                    </select>
+                                </div>
+                                <button onclick="agregarAsignacionInline(${aulaId})" style="background:linear-gradient(135deg,#0d47a1,#1976d2);color:#fff;border:none;padding:9px 18px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;white-space:nowrap;flex-shrink:0">+ Agregar</button>
+                            </div>
+                        </div>
                         ${asignaciones.length === 0 ? '<p style="color:#888">Sin asignaciones registradas.</p>' : `
                             <table class="data-table">
                                 <thead><tr><th>Asignatura</th><th>Maestro</th><th>Especialidad</th><th>Acciones</th></tr></thead>
@@ -1620,27 +1646,22 @@ async function verDetalleAula(aulaId) {
     }
 }
 
-async function mostrarFormAgregarAsignacion(aulaId) {
-    const asignatura = await showPrompt("Ingresa la asignatura (Ej: Matemáticas, Español, Ciencias):");
-    if (!asignatura || !asignatura.trim()) return;
+async function agregarAsignacionInline(aulaId) {
+    const asignatura = (document.getElementById(`input-asignatura-${aulaId}`) || {}).value || "";
+    const maestroId  = (document.getElementById(`sel-maestro-${aulaId}`)    || {}).value || "";
 
-    const maestroId = await showPrompt("ID del maestro (usa la lista de maestros registrados):");
-    if (!maestroId) return;
+    if (!asignatura.trim()) { showToast("Ingrese el nombre de la materia.", "error"); return; }
+    if (!maestroId)         { showToast("Seleccione un maestro.", "error"); return; }
 
     try {
         const res = await fetch(`${API}/asignaciones`, {
             method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({
-                aula_id: aulaId,
-                asignatura: asignatura.trim(),
-                maestro_id: parseInt(maestroId)
-            })
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ aula_id: aulaId, asignatura: asignatura.trim(), maestro_id: parseInt(maestroId) })
         });
         const data = await res.json();
-
         if (!res.ok) { showToast(data.error || "Error al asignar.", "error"); return; }
-        showToast("Asignación agregada exitosamente.", "success");
+        showToast("Asignación agregada.", "success");
         verDetalleAula(aulaId);
     } catch (err) { showToast("Error de conexión.", "error"); }
 }
@@ -1732,11 +1753,11 @@ function actualizarBannerDocente() {
         banner.style.display = 'flex';
         const nombre = aulaSeleccionada.aula_numero || (aulaSeleccionada.grado + ' ' + aulaSeleccionada.seccion);
         if (mostrarTodosEstudiantes) {
-            if (info) info.textContent = 'Mostrando todos los estudiantes';
-            if (btnVer) btnVer.textContent = 'Volver al aula';
+            if (info) info.textContent = 'Mostrando todos mis estudiantes';
+            if (btnVer) btnVer.textContent = 'Ver aula activa';
         } else {
             if (info) info.textContent = `Mostrando estudiantes de: ${nombre}`;
-            if (btnVer) btnVer.textContent = 'Ver todos los estudiantes';
+            if (btnVer) btnVer.textContent = 'Ver mis estudiantes';
         }
     } else {
         banner.style.display = 'none';

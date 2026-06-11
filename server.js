@@ -725,6 +725,14 @@ app.delete("/api/maestros/:id", function(req, res) {
     });
 });
 
+app.get("/api/maestros/para-asignaciones", function(req, res) {
+    const sql = "SELECT id, nombre, especialidad FROM maestros WHERE activo = 1 ORDER BY nombre";
+    db.query(sql, function(err, results) {
+        if (err) return res.status(500).json({ error: "Error al obtener maestros." });
+        res.json(results);
+    });
+});
+
 // =============================================
 //  ASIGNACIONES (Maestro + Aula + Asignatura)
 // =============================================
@@ -827,7 +835,7 @@ app.get("/api/exportar/pdf/:tipo", function(req, res) {
     } else if (tipo === "calificaciones") {
         sql = "SELECT e.nombre AS estudiante, c.asignatura, c.parcial_1, c.parcial_2, c.final FROM calificaciones c JOIN estudiantes e ON c.estudiante_id = e.id ORDER BY e.nombre";
         titulo = "Reporte de Calificaciones";
-        columnas = ["Estudiante", "Asignatura", "Parcial 1", "Parcial 2", "Final"];
+        columnas = ["Estudiante", "Asignatura", "P1", "P2", "Promedio"];
     } else if (tipo === "asistencia") {
         sql = "SELECT e.nombre AS estudiante, DATE_FORMAT(a.fecha,'%d/%m/%Y') AS fecha, a.estado FROM asistencia a JOIN estudiantes e ON a.estudiante_id = e.id ORDER BY a.fecha DESC";
         titulo = "Reporte de Asistencia";
@@ -884,7 +892,7 @@ app.get("/api/exportar/excel/:tipo", async function(req, res) {
     } else if (tipo === "calificaciones") {
         sql = "SELECT e.nombre AS estudiante, c.asignatura, c.competencia, c.parcial_1, c.parcial_2, c.final FROM calificaciones c JOIN estudiantes e ON c.estudiante_id = e.id ORDER BY e.nombre";
         titulo = "Calificaciones";
-        columnas = ["Estudiante", "Asignatura", "Competencia", "Parcial 1", "Parcial 2", "Final"];
+        columnas = ["Estudiante", "Asignatura", "Competencia", "P1", "P2", "Promedio"];
     } else if (tipo === "asistencia") {
         sql = "SELECT e.nombre AS estudiante, DATE_FORMAT(a.fecha,'%d/%m/%Y') AS fecha, a.estado, a.observacion FROM asistencia a JOIN estudiantes e ON a.estudiante_id = e.id ORDER BY a.fecha DESC";
         titulo = "Asistencia";
@@ -1053,7 +1061,7 @@ app.get("/api/exportar/boletin/pdf/:estudianteId", function(req, res) {
 
                                 const tableTop = doc.y;
                                 const colWidths = [140, 55, 55, 55, 55, 60, 85];
-                                const headers = ["ASIGNATURA", "1RA NOTA", "2DA NOTA", "3RA NOTA", "4TA NOTA", "PROMEDIO", "CONDICIÓN"];
+                                const headers = ["ASIGNATURA", "P1", "P2", "P3", "P4", "PROMEDIO", "CONDICIÓN"];
 
                                 let tableX = 40;
                                 doc.fontSize(9).fillColor("#ffffff");
@@ -1187,7 +1195,7 @@ app.get("/api/exportar/boletin/excel/:estudianteId", async function(req, res) {
         worksheet.getCell(`A${row}`).font = { bold: true, size: 11 };
         row++;
 
-        const headers = ["Asignatura", "Parc. 1", "Parc. 2", "Final"];
+        const headers = ["Asignatura", "P1", "P2", "Promedio"];
         headers.forEach((h, i) => {
             const cell = worksheet.getCell(row, i + 1);
             cell.value = h;
@@ -1312,7 +1320,7 @@ app.get("/api/exportar/boletin/excel", async function(req, res) {
                 worksheet.getCell(`A${row}`).font = { bold: true, size: 11 };
                 row++;
 
-                const headers = ["Asignatura", "Parc. 1", "Parc. 2", "Final"];
+                const headers = ["Asignatura", "P1", "P2", "Promedio"];
                 headers.forEach((h, i) => {
                     const cell = worksheet.getCell(row, i + 1);
                     cell.value = h;
