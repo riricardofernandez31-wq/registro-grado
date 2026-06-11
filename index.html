@@ -335,6 +335,11 @@
                 <h3 class="panel-title">Control de Asistencia - <span id="fechaHoy"></span></h3>
                 <p style="color:#666; margin-bottom:20px; font-size:14px">Registre la asistencia diaria y las participaciones del aula.</p>
 
+                <div id="asistencia-aula-banner" style="display:none; background:#e3f2fd; border-radius:8px; padding:10px 16px; margin-bottom:16px; font-size:13px; color:#0d2352; align-items:center; justify-content:space-between; gap:12px;">
+                    <span>📚 Aula: <strong id="asistencia-aula-nombre">—</strong></span>
+                    <a href="#" onclick="irPanelPrincipal(); return false;" style="color:#1565c0; font-size:12px; font-weight:600; text-decoration:none; background:rgba(21,101,192,0.12); padding:4px 10px; border-radius:4px; white-space:nowrap">Cambiar aula</a>
+                </div>
+
                 <div class="asistencia-tabs">
                     <button class="asistencia-tab active" data-tab="asistencia" onclick="seleccionarTabAsistencia('asistencia')">Asistencia</button>
                     <button class="asistencia-tab" data-tab="participaciones" onclick="seleccionarTabAsistencia('participaciones')">Participaciones</button>
@@ -349,7 +354,7 @@
                 </div>
 
                 <div id="panelParticipaciones" class="asistencia-panel" style="display:none">
-                    <div class="form-grid" style="grid-template-columns:1fr 1fr; gap:12px; align-items:end; margin-bottom:16px;">
+                    <div id="participaciones-aula-selector" class="form-grid" style="grid-template-columns:1fr 1fr; gap:12px; align-items:end; margin-bottom:16px;">
                         <div class="field">
                             <label>Aula</label>
                             <select id="selAulaParticipaciones" class="filtro-select" onchange="cargarParticipacionesAula()">
@@ -359,6 +364,12 @@
                         <div class="field">
                             <label>Fecha</label>
                             <input type="date" id="fechaParticipaciones" class="part-input" onchange="cargarParticipacionesAula()">
+                        </div>
+                    </div>
+                    <div id="participaciones-fecha-solo" style="display:none; margin-bottom:16px;">
+                        <div class="field" style="max-width:200px">
+                            <label>Fecha</label>
+                            <input type="date" id="fechaParticipaciones2" class="part-input" onchange="sincronizarFechaParticipaciones()">
                         </div>
                     </div>
                     <div id="listaParticipaciones"><p class="empty-row">Seleccione aula y fecha para cargar estudiantes.</p></div>

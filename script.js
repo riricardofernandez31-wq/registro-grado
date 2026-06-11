@@ -790,6 +790,8 @@ document.getElementById("fechaHoy").textContent =
 
 async function cargarAsistencia() {
     try {
+        const rol = localStorage.getItem('userRol') || (usuarioActual && usuarioActual.rol);
+
         const [resEst, resAulas] = await Promise.all([
             fetch(`${API}/estudiantes`),
             fetch(`${API}/aulas`)
@@ -800,14 +802,45 @@ async function cargarAsistencia() {
         estudiantesCache = data;
         aulasCache = Array.isArray(aulas) ? aulas : [];
 
-        // Para docentes con aula seleccionada, mostrar solo sus estudiantes
-        const listaAsis = aulaSeleccionada
+        // Restaurar aulaSeleccionada desde localStorage si el estado JS se perdió
+        if (rol === 'docente' && !aulaSeleccionada) {
+            const savedId = localStorage.getItem('aulaSeleccionadaId');
+            if (savedId) {
+                aulaSeleccionada = aulasDocente.find(a => String(a.id) === savedId)
+                    || aulasCache.find(a => String(a.id) === savedId)
+                    || null;
+            }
+        }
+
+        // Banner de aula para docentes
+        const banner = document.getElementById('asistencia-aula-banner');
+        const bannerNombre = document.getElementById('asistencia-aula-nombre');
+        const selectorAdmin = document.getElementById('participaciones-aula-selector');
+        const selectorFechaSolo = document.getElementById('participaciones-fecha-solo');
+
+        if (rol === 'docente') {
+            if (banner) banner.style.display = 'flex';
+            if (bannerNombre) {
+                bannerNombre.textContent = aulaSeleccionada
+                    ? (aulaSeleccionada.aula_numero || `${aulaSeleccionada.grado} ${aulaSeleccionada.seccion}`)
+                    : '—';
+            }
+            if (selectorAdmin) selectorAdmin.style.display = 'none';
+            if (selectorFechaSolo) selectorFechaSolo.style.display = 'block';
+        } else {
+            if (banner) banner.style.display = 'none';
+            if (selectorAdmin) selectorAdmin.style.display = '';
+            if (selectorFechaSolo) selectorFechaSolo.style.display = 'none';
+        }
+
+        // Para docentes: filtrar solo estudiantes del aula seleccionada
+        const listaAsis = (rol === 'docente' && aulaSeleccionada)
             ? data.filter(est => String(est.aula_id) === String(aulaSeleccionada.id))
             : data;
 
         const contenedor = document.getElementById("listaAsistencia");
         if (listaAsis.length === 0) {
-            contenedor.innerHTML = aulaSeleccionada
+            contenedor.innerHTML = (rol === 'docente' && aulaSeleccionada)
                 ? '<p class="empty-row">No hay estudiantes activos en el aula seleccionada.</p>'
                 : '<p class="empty-row">Registre estudiantes primero para tomar asistencia.</p>';
         } else {
@@ -828,21 +861,22 @@ async function cargarAsistencia() {
             }, { once: false });
         }
 
-        const selectAula = document.getElementById("selAulaParticipaciones");
-        if (selectAula) {
-            selectAula.innerHTML = '<option value="">Seleccione un aula</option>' + aulasCache
-                .map(a => `<option value="${a.id}">${a.aula_numero || a.grado + '-' + a.seccion}</option>`)
-                .join("");
-            // Pre-seleccionar el aula activa para docentes
-            if (aulaSeleccionada) {
-                selectAula.value = String(aulaSeleccionada.id);
+        // Para admins/directores: llenar dropdown de aulas en participaciones
+        if (rol !== 'docente') {
+            const selectAula = document.getElementById("selAulaParticipaciones");
+            if (selectAula) {
+                selectAula.innerHTML = '<option value="">Seleccione un aula</option>' + aulasCache
+                    .map(a => `<option value="${a.id}">${a.aula_numero || a.grado + '-' + a.seccion}</option>`)
+                    .join("");
             }
         }
 
-        const fechaParticipaciones = document.getElementById("fechaParticipaciones");
-        if (fechaParticipaciones) {
-            fechaParticipaciones.value = new Date().toISOString().split("T")[0];
-        }
+        // Sincronizar fecha en ambos inputs de fecha
+        const hoyStr = new Date().toISOString().split("T")[0];
+        const fp = document.getElementById("fechaParticipaciones");
+        const fp2 = document.getElementById("fechaParticipaciones2");
+        if (fp && !fp.value) fp.value = hoyStr;
+        if (fp2 && !fp2.value) fp2.value = hoyStr;
 
         seleccionarTabAsistencia("asistencia");
         cargarParticipacionesAula();
@@ -857,9 +891,23 @@ function seleccionarTabAsistencia(tab) {
     document.getElementById("panelParticipaciones").style.display = tab === "participaciones" ? "block" : "none";
 }
 
+function sincronizarFechaParticipaciones() {
+    const fp2 = document.getElementById("fechaParticipaciones2");
+    const fp = document.getElementById("fechaParticipaciones");
+    if (fp && fp2) fp.value = fp2.value;
+    cargarParticipacionesAula();
+}
+
 async function cargarParticipacionesAula() {
-    const aulaId = document.getElementById("selAulaParticipaciones")?.value;
-    const fecha = document.getElementById("fechaParticipaciones")?.value;
+    const rol = localStorage.getItem('userRol') || (usuarioActual && usuarioActual.rol);
+    let aulaId;
+    if (rol === 'docente') {
+        aulaId = aulaSeleccionada ? String(aulaSeleccionada.id) : null;
+    } else {
+        aulaId = document.getElementById("selAulaParticipaciones")?.value;
+    }
+    const fecha = document.getElementById("fechaParticipaciones")?.value
+        || document.getElementById("fechaParticipaciones2")?.value;
     const contenedor = document.getElementById("listaParticipaciones");
     if (!aulaId) {
         if (contenedor) contenedor.innerHTML = '<p class="empty-row">Seleccione un aula para cargar los estudiantes.</p>';
@@ -918,8 +966,12 @@ async function cargarParticipacionesAula() {
 }
 
 async function guardarParticipacionesAula() {
-    const aulaId = document.getElementById("selAulaParticipaciones")?.value;
-    const fecha = document.getElementById("fechaParticipaciones")?.value;
+    const rol = localStorage.getItem('userRol') || (usuarioActual && usuarioActual.rol);
+    const aulaId = (rol === 'docente' && aulaSeleccionada)
+        ? String(aulaSeleccionada.id)
+        : document.getElementById("selAulaParticipaciones")?.value;
+    const fecha = document.getElementById("fechaParticipaciones")?.value
+        || document.getElementById("fechaParticipaciones2")?.value;
     if (!aulaId || !fecha) {
         showToast("Seleccione aula y fecha antes de guardar.", "warning");
         return;
