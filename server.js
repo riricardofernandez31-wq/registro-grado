@@ -304,7 +304,13 @@ app.post("/api/login", function(req, res) {
 //  ESTUDIANTES
 // =============================================
 app.get("/api/estudiantes", function(req, res) {
-    db.query("SELECT * FROM estudiantes WHERE activo = 1 ORDER BY creado_en DESC", function(err, results) {
+    const sql = `
+        SELECT ROW_NUMBER() OVER (PARTITION BY aula_id ORDER BY SUBSTRING_INDEX(nombre, ' ', -1) ASC) AS orden, e.*
+        FROM estudiantes e
+        WHERE e.activo = 1
+        ORDER BY e.aula_id, SUBSTRING_INDEX(e.nombre, ' ', -1) ASC
+    `;
+    db.query(sql, function(err, results) {
         if (err) { console.error("GET /api/estudiantes:", err.message); return res.status(500).json({ error: "Error al obtener estudiantes.", detalle: err.message }); }
         res.json(results);
     });
@@ -316,15 +322,25 @@ app.get("/api/estudiantes/buscar", function(req, res) {
     const grado   = req.query.grado   || "";
     const seccion = req.query.seccion || "";
     const term    = "%" + q + "%";
-    let sql      = "SELECT * FROM estudiantes WHERE activo=1";
+
+    let where = "1=1";
     const params = [];
     if (q) {
-        sql += " AND (nombre LIKE ? OR matricula LIKE ? OR IFNULL(cedula,'') LIKE ?)";
+        where += " AND (nombre LIKE ? OR matricula LIKE ? OR IFNULL(cedula,'') LIKE ?)";
         params.push(term, term, term);
     }
-    if (grado)   { sql += " AND grado=?";   params.push(grado);   }
-    if (seccion) { sql += " AND seccion=?"; params.push(seccion); }
-    sql += " ORDER BY nombre LIMIT 100";
+    if (grado)   { where += " AND grado=?";   params.push(grado);   }
+    if (seccion) { where += " AND seccion=?"; params.push(seccion); }
+
+    const sql = `
+        SELECT * FROM (
+            SELECT ROW_NUMBER() OVER (PARTITION BY aula_id ORDER BY SUBSTRING_INDEX(nombre, ' ', -1) ASC) AS orden, e.*
+            FROM estudiantes e WHERE e.activo = 1
+        ) sub
+        WHERE ${where}
+        ORDER BY SUBSTRING_INDEX(nombre, ' ', -1) ASC
+        LIMIT 100
+    `;
     db.query(sql, params, function(err, results) {
         if (err) { console.error("GET /api/estudiantes/buscar:", err.message); return res.status(500).json({ error: "Error al buscar.", detalle: err.message }); }
         res.json(results);
@@ -465,11 +481,18 @@ app.post("/api/calificaciones", function(req, res) {
 //  ASISTENCIA
 // =============================================
 app.get("/api/asistencia", function(req, res) {
-    db.query("SELECT a.id, DATE_FORMAT(a.fecha, '%Y-%m-%d') AS fecha, a.estado, a.observacion, e.nombre AS nombre_estudiante FROM asistencia a JOIN estudiantes e ON a.estudiante_id = e.id ORDER BY a.fecha DESC",
-        function(err, results) {
-            if (err) return res.status(500).json({ error: "Error al obtener asistencia." });
-            res.json(results);
-        });
+    const sql = `
+        SELECT a.id, DATE_FORMAT(a.fecha, '%Y-%m-%d') AS fecha, a.estado, a.observacion,
+               e.nombre AS nombre_estudiante,
+               ROW_NUMBER() OVER (PARTITION BY e.aula_id ORDER BY SUBSTRING_INDEX(e.nombre, ' ', -1) ASC) AS orden
+        FROM asistencia a
+        JOIN estudiantes e ON a.estudiante_id = e.id
+        ORDER BY a.fecha DESC, SUBSTRING_INDEX(e.nombre, ' ', -1) ASC
+    `;
+    db.query(sql, function(err, results) {
+        if (err) return res.status(500).json({ error: "Error al obtener asistencia." });
+        res.json(results);
+    });
 });
 
 app.post("/api/asistencia", function(req, res) {
@@ -1673,11 +1696,13 @@ app.get("/api/participaciones/aula/:aulaId/fecha/:fecha", function(req, res) {
         return res.status(400).json({ error: "Aula o fecha inválida." });
     }
     db.query(
-        `SELECT p.id, p.estudiante_id, p.fecha, p.puntuacion, p.observacion, p.descripcion, e.nombre AS estudiante_nombre
+        `SELECT p.id, p.estudiante_id, p.fecha, p.puntuacion, p.observacion, p.descripcion,
+                e.nombre AS estudiante_nombre,
+                ROW_NUMBER() OVER (PARTITION BY e.aula_id ORDER BY SUBSTRING_INDEX(e.nombre, ' ', -1) ASC) AS orden
          FROM participaciones p
          JOIN estudiantes e ON e.id = p.estudiante_id
          WHERE e.aula_id = ? AND p.fecha = ? AND e.activo = 1
-         ORDER BY e.nombre`,
+         ORDER BY SUBSTRING_INDEX(e.nombre, ' ', -1) ASC`,
         [aulaId, fecha], function(err, rows) {
             if (err) return res.status(500).json({ error: "Error al obtener participaciones por aula." });
             res.json(rows || []);

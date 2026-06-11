@@ -592,11 +592,12 @@ async function cargarTablaEstudiantes() {
         estudiantesCache = data;
         const tbody = document.getElementById("tablaEstudiantes");
         if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No hay estudiantes registrados.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="empty-row">No hay estudiantes registrados.</td></tr>';
             return;
         }
         tbody.innerHTML = data.map(e => `
             <tr>
+                <td style="font-weight:700;color:#1565c0;text-align:center">${e.orden || '—'}</td>
                 <td>${e.nombre}</td>
                 <td>${e.matricula}</td>
                 <td>${e.grado}</td>
@@ -634,7 +635,7 @@ async function cargarSelectEstudiantes() {
         lista.forEach(function(est) {
             const opt = document.createElement("option");
             opt.value       = est.id;
-            opt.textContent = `${est.nombre} (${est.grado}${est.seccion ? " - "+est.seccion : ""})`;
+            opt.textContent = `N°${est.orden || '?'} - ${est.nombre} (${est.grado}${est.seccion ? " - "+est.seccion : ""})`;
             select.appendChild(opt);
         });
         cargarTablaCalificaciones();
@@ -706,12 +707,14 @@ async function cargarTablaCalificaciones() {
         const data = await res.json();
         const tbody = document.getElementById("tablaCalificaciones");
         if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="empty-row">No hay calificaciones registradas.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-row">No hay calificaciones registradas.</td></tr>';
             return;
         }
-        tbody.innerHTML = data.map(c =>
-            `<tr><td>${c.nombre_estudiante}</td><td>${c.asignatura}</td><td>${c.nota1 ?? '—'}</td><td>${c.nota2 ?? '—'}</td><td>${c.nota3 ?? '—'}</td><td>${c.nota4 ?? '—'}</td><td><strong>${c.promedio ?? '—'}</strong></td></tr>`
-        ).join("");
+        tbody.innerHTML = data.map(c => {
+            const est = estudiantesCache.find(e => e.id === c.estudiante_id);
+            const orden = est ? (est.orden || '—') : '—';
+            return `<tr><td style="font-weight:700;color:#1565c0;text-align:center">${orden}</td><td>${c.nombre_estudiante}</td><td>${c.asignatura}</td><td>${c.nota1 ?? '—'}</td><td>${c.nota2 ?? '—'}</td><td>${c.nota3 ?? '—'}</td><td>${c.nota4 ?? '—'}</td><td><strong>${c.promedio ?? '—'}</strong></td></tr>`;
+        }).join("");
     } catch (err) { console.error("Error calificaciones:", err); }
 }
 
@@ -747,6 +750,7 @@ async function cargarAsistencia() {
         } else {
             contenedor.innerHTML = listaAsis.map(est => `
                 <div class="asistencia-row">
+                    <span class="asistencia-orden">${est.orden || '—'}</span>
                     <span class="asistencia-nombre">${est.nombre}</span>
                     <label><input type="radio" name="as-${est.id}" value="presente" checked> Presente</label>
                     <label><input type="radio" name="as-${est.id}" value="ausente"> Ausente</label>
@@ -823,7 +827,7 @@ async function cargarParticipacionesAula() {
             const obs = registro.observacion || registro.descripcion || "";
             return `
                 <div class="participacion-row">
-                    <div><strong>${est.nombre}</strong></div>
+                    <div style="display:flex;align-items:center;gap:8px"><span style="background:#e3f2fd;color:#1565c0;font-weight:700;font-size:12px;padding:2px 7px;border-radius:4px;min-width:28px;text-align:center">N°${est.orden || '?'}</span><strong>${est.nombre}</strong></div>
                     <div>
                         <label style="font-size:13px;color:#555">Puntaje</label>
                         <select class="part-score part-input" data-id="${est.id}">

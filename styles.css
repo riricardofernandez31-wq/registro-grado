@@ -740,12 +740,22 @@ body {
 
 .asistencia-row {
     display: grid;
-    grid-template-columns: 1fr repeat(4, auto);
+    grid-template-columns: 36px 1fr repeat(4, auto);
     gap: 12px;
     align-items: center;
     padding: 12px 0;
     border-bottom: 1px solid #f0f4fa;
     font-size: 14px;
+}
+
+.asistencia-orden {
+    font-weight: 700;
+    color: #1565c0;
+    font-size: 13px;
+    text-align: center;
+    background: #e3f2fd;
+    padding: 3px 0;
+    border-radius: 4px;
 }
 
 .asistencia-row:last-child {
@@ -1495,14 +1505,19 @@ body {
     /* --- Asistencia --- */
     .asistencia-row {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 36px 1fr 1fr;
         gap: 8px 10px;
         padding: 12px;
         margin-bottom: 10px;
     }
 
+    .asistencia-orden {
+        grid-row: 1;
+        grid-column: 1;
+    }
+
     .asistencia-nombre {
-        grid-column: span 2;
+        grid-column: 2 / span 2;
         font-size: 13px;
         font-weight: 600;
         margin-bottom: 4px;
@@ -1662,7 +1677,7 @@ body {
     }
 
     .asistencia-row {
-        grid-template-columns: 1fr;
+        grid-template-columns: 36px 1fr;
     }
 
     .asistencia-nombre {
