@@ -1407,26 +1407,33 @@ app.get("/api/dashboard/stats", function(req, res) {
                 });
             }),
             new Promise((resolve) => {
-                // Promedio general
+                // Promedio general — solo calificaciones con valor > 0
                 db.query(`
-                    SELECT AVG(final) as promedio
+                    SELECT ROUND(AVG(promedio_redondeado), 1) as promedio
                     FROM calificaciones
-                    WHERE final IS NOT NULL AND anio_escolar=?
+                    WHERE promedio_redondeado > 0 AND anio_escolar=?
                 `, [anioEscolar], function(err, rows) {
                     resolve(err || !rows[0]?.promedio ? 0 : rows[0].promedio);
                 });
             }),
             new Promise((resolve) => {
-                // Alertas académicas (promedio < 70)
+                // Alertas académicas — mismos criterios que la tabla Top 5
                 db.query(`
-                    SELECT COUNT(DISTINCT e.id) as alertas
-                    FROM estudiantes e
-                    LEFT JOIN calificaciones c ON e.id=c.estudiante_id
-                    WHERE e.activo=1
-                    GROUP BY e.id
-                    HAVING AVG(c.final) < 70 OR COUNT(c.id)=0
+                    SELECT COUNT(*) as total FROM (
+                        SELECT e.id
+                        FROM estudiantes e
+                        LEFT JOIN calificaciones c ON e.id = c.estudiante_id AND c.promedio_redondeado > 0
+                        LEFT JOIN asistencia a ON e.id = a.estudiante_id
+                        WHERE e.activo = 1
+                        GROUP BY e.id
+                        HAVING
+                            (COUNT(c.id) > 0 AND AVG(c.promedio_redondeado) < 70)
+                            OR (COUNT(DISTINCT a.id) > 0
+                                AND (SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END)
+                                     / NULLIF(COUNT(DISTINCT a.id), 0)) * 100 < 80)
+                    ) conteo
                 `, function(err, rows) {
-                    resolve(err ? 0 : rows.length);
+                    resolve(err ? 0 : (rows[0]?.total || 0));
                 });
             }),
             new Promise((resolve) => {
@@ -1512,10 +1519,10 @@ app.get("/api/dashboard/promedios-por-grado", function(req, res) {
     const sql = `
         SELECT
             e.grado,
-            AVG(c.final) as promedio
+            ROUND(AVG(c.promedio_redondeado), 1) as promedio
         FROM estudiantes e
-        LEFT JOIN calificaciones c ON e.id=c.estudiante_id AND c.final IS NOT NULL
-        WHERE e.activo=1
+        LEFT JOIN calificaciones c ON e.id = c.estudiante_id AND c.promedio_redondeado > 0
+        WHERE e.activo = 1
         GROUP BY e.grado
     `;
 
@@ -1553,11 +1560,13 @@ app.get("/api/dashboard/distribucion-notas", function(req, res) {
                 END as categoria,
                 COUNT(*) as cantidad
             FROM (
-                SELECT e.id, AVG(c.final) as promedio
+                SELECT e.id, ROUND(AVG(c.promedio_redondeado), 1) as promedio
                 FROM estudiantes e
-                LEFT JOIN calificaciones c ON e.id=c.estudiante_id AND c.anio_escolar=?
-                WHERE e.activo=1
+                LEFT JOIN calificaciones c ON e.id = c.estudiante_id
+                    AND c.anio_escolar = ? AND c.promedio_redondeado > 0
+                WHERE e.activo = 1
                 GROUP BY e.id
+                HAVING AVG(c.promedio_redondeado) IS NOT NULL
             ) as stats
             GROUP BY categoria
         `;
@@ -1591,27 +1600,28 @@ app.get("/api/dashboard/alertas-academicas", function(req, res) {
                 e.nombre,
                 e.grado,
                 e.seccion,
-                COALESCE(AVG(c.final), 0) as promedio,
+                ROUND(AVG(c.promedio_redondeado), 1) as promedio,
                 ROUND(
                     (SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END) /
                      NULLIF(COUNT(DISTINCT a.id), 0)) * 100, 1
                 ) as asistencia,
                 CASE
-                    WHEN COALESCE(AVG(c.final), 0) < 60 THEN 'critico'
-                    WHEN COALESCE(AVG(c.final), 0) < 70 THEN 'bajo'
-                    WHEN ROUND(
-                        (SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END) /
-                         NULLIF(COUNT(DISTINCT a.id), 0)) * 100, 1
-                    ) < 80 THEN 'riesgo'
-                    ELSE 'ok'
+                    WHEN ROUND(AVG(c.promedio_redondeado), 1) < 60 THEN 'critico'
+                    WHEN ROUND(AVG(c.promedio_redondeado), 1) < 70 THEN 'bajo'
+                    ELSE 'riesgo'
                 END as nivel_alerta
             FROM estudiantes e
-            LEFT JOIN calificaciones c ON e.id=c.estudiante_id AND c.anio_escolar=?
-            LEFT JOIN asistencia a ON e.id=a.estudiante_id
-            WHERE e.activo=1
+            LEFT JOIN calificaciones c ON e.id = c.estudiante_id
+                AND c.anio_escolar = ? AND c.promedio_redondeado > 0
+            LEFT JOIN asistencia a ON e.id = a.estudiante_id
+            WHERE e.activo = 1
             GROUP BY e.id, e.nombre, e.grado, e.seccion
-            HAVING promedio < 70 OR asistencia < 80
-            ORDER BY promedio ASC, asistencia ASC
+            HAVING
+                (COUNT(c.id) > 0 AND AVG(c.promedio_redondeado) < 70)
+                OR (COUNT(DISTINCT a.id) > 0
+                    AND (SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END)
+                         / NULLIF(COUNT(DISTINCT a.id), 0)) * 100 < 80)
+            ORDER BY promedio ASC
             LIMIT 15
         `;
 
