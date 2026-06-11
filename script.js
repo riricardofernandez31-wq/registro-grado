@@ -18,6 +18,7 @@ let maestrosCache = [];
 let editandoAulaId = null;
 let chartPromedioGrado = null;
 let mostrarTodosEstudiantes = false;
+let formAsistenciaDirty = false;
 
 function parseFechaMySQL(fecha) {
     if (!fecha) return null;
@@ -113,6 +114,49 @@ function showConfirm(mensaje, onConfirm, onCancel) {
         }
     };
     document.addEventListener('keydown', handleEscape);
+}
+
+// =============================================
+//  CONFIRMACIÓN SALIR SIN GUARDAR
+// =============================================
+function showConfirmSalir(onSalir) {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'confirm-modal';
+    modal.innerHTML = `
+        <div class="confirm-content">
+            <p class="confirm-mensaje" style="font-size:15px;font-weight:700;margin-bottom:6px">⚠️ Cambios sin guardar</p>
+            <p style="font-size:13px;color:#666;margin-bottom:20px">Tienes cambios sin guardar. Si sales ahora los perderás. ¿Deseas salir de todas formas?</p>
+            <div class="confirm-actions">
+                <button class="btn-cancel" style="background:#1565c0;color:#fff;border-color:#1565c0">Quedarme</button>
+                <button class="btn-confirm" style="background:#c62828;border-color:#c62828">Salir sin guardar</button>
+            </div>
+        </div>`;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    setTimeout(() => overlay.classList.add('show'), 10);
+
+    function cerrar() { overlay.classList.remove('show'); setTimeout(() => overlay.remove(), 300); }
+    modal.querySelector('.btn-cancel').addEventListener('click', cerrar);
+    modal.querySelector('.btn-confirm').addEventListener('click', () => {
+        formAsistenciaDirty = false;
+        cerrar();
+        onSalir();
+    });
+    overlay.addEventListener('click', e => { if (e.target === overlay) cerrar(); });
+}
+
+function hayFormularioPendiente() {
+    // Calificaciones: estudiante seleccionado + al menos una nota ingresada
+    const calEst = document.getElementById('cal-estudiante')?.value;
+    if (calEst && ['cal-p1','cal-p2','cal-p3','cal-p4'].some(i => document.getElementById(i)?.value?.trim())) return true;
+    // Asistencia: usuario cambió algún radio
+    if (formAsistenciaDirty) return true;
+    // Participaciones en ficha: descripción escrita
+    const partDesc = document.getElementById('part-desc')?.value?.trim();
+    if (partDesc) return true;
+    return false;
 }
 
 // =============================================
@@ -218,17 +262,19 @@ document.getElementById("loginForm").addEventListener("submit", async function(e
         document.getElementById("userNameDisplay").textContent = data.usuario.nombre;
         document.getElementById("userRolBadge").textContent    = formatRol(data.usuario.rol);
         document.getElementById("loginContainer").style.display = "none";
-        document.getElementById("dashboard").style.display      = "flex";
+
+        // Aplicar rol y sección ANTES de mostrar el dashboard para evitar flash
         aplicarPermisos(data.usuario.rol);
         aplicarVistaRol(data.usuario.rol);
         cargarNombreCentro();
-        
+
         if (data.usuario.rol === "docente") {
             await cargarAulasDocente(data.usuario.id);
         }
         mostrarSeccion("inicio");
         document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
         document.querySelector('[data-section="inicio"]')?.classList.add("active");
+        document.getElementById("dashboard").style.display = "flex";
 
     } catch (err) {
         errorDiv.textContent   = "No se pudo conectar al servidor. Esta corriendo Node.js?";
@@ -300,19 +346,27 @@ async function cargarNombreCentro() {
 //  LOGOUT
 // =============================================
 document.getElementById("btnLogout").addEventListener("click", function() {
-    usuarioActual    = null;
-    estudiantesCache = [];
-    aulaSeleccionada = null;
-    aulasDocente     = [];
-    localStorage.removeItem('userRol');
-    localStorage.removeItem('usuarioId');
-    localStorage.removeItem('aulaSeleccionadaId');
-    const badge = document.getElementById("aulaActivaBadge");
-    if (badge) badge.style.display = "none";
-    document.getElementById("dashboard").style.display      = "none";
-    document.getElementById("loginContainer").style.display = "flex";
-    document.getElementById("loginForm").reset();
-    document.getElementById("loginError").style.display     = "none";
+    function doLogout() {
+        usuarioActual    = null;
+        estudiantesCache = [];
+        aulaSeleccionada = null;
+        aulasDocente     = [];
+        formAsistenciaDirty = false;
+        localStorage.removeItem('userRol');
+        localStorage.removeItem('usuarioId');
+        localStorage.removeItem('aulaSeleccionadaId');
+        const badge = document.getElementById("aulaActivaBadge");
+        if (badge) badge.style.display = "none";
+        document.getElementById("dashboard").style.display      = "none";
+        document.getElementById("loginContainer").style.display = "flex";
+        document.getElementById("loginForm").reset();
+        document.getElementById("loginError").style.display     = "none";
+    }
+    if (hayFormularioPendiente()) {
+        showConfirmSalir(doLogout);
+    } else {
+        doLogout();
+    }
 });
 
 document.getElementById("btnHamburger").addEventListener("click", function() {
@@ -331,17 +385,26 @@ document.querySelectorAll(".nav-item").forEach(function(item) {
     item.addEventListener("click", function(e) {
         e.preventDefault();
         const seccion = this.getAttribute("data-section");
-        mostrarSeccion(seccion);
-        document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
-        this.classList.add("active");
-        if (window.innerWidth <= 768) {
-            document.querySelector(".sidebar").classList.remove("open");
-            document.getElementById("sidebarOverlay").classList.remove("active");
+        const navEl = this;
+        function realizarNav() {
+            mostrarSeccion(seccion);
+            document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+            navEl.classList.add("active");
+            if (window.innerWidth <= 768) {
+                document.querySelector(".sidebar").classList.remove("open");
+                document.getElementById("sidebarOverlay").classList.remove("active");
+            }
+        }
+        if (hayFormularioPendiente()) {
+            showConfirmSalir(realizarNav);
+        } else {
+            realizarNav();
         }
     });
 });
 
 function mostrarSeccion(nombre) {
+    formAsistenciaDirty = false;
     // "participaciones" no tiene sección propia, usa sec-asistencia
     const seccionReal = nombre === "participaciones" ? "asistencia" : nombre;
     document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
@@ -759,6 +822,10 @@ async function cargarAsistencia() {
                         <label><input type="radio" name="as-${est.id}" value="excusa"> Excusa</label>
                     </div>
                 </div>`).join("");
+            formAsistenciaDirty = false;
+            contenedor.addEventListener("change", function(e) {
+                if (e.target.type === "radio") formAsistenciaDirty = true;
+            }, { once: false });
         }
 
         const selectAula = document.getElementById("selAulaParticipaciones");
@@ -915,6 +982,7 @@ document.getElementById("btnGuardarAsistencia").addEventListener("click", async 
             method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({registros})
         });
         if (!res.ok) { showToast("Error al guardar asistencia.", "error"); return; }
+        formAsistenciaDirty = false;
         const msg = document.getElementById("msgAsistencia");
         msg.style.display = "block";
         setTimeout(() => msg.style.display = "none", 3000);
@@ -1218,6 +1286,9 @@ async function mostrarFichaEstudiante(id) {
     const contenedor = document.getElementById("ficha-contenedor");
     contenedor.innerHTML = '<div class="panel" style="padding:24px"><p style="color:#888">Cargando ficha...</p></div>';
     contenedor.scrollIntoView({ behavior:"smooth", block:"start" });
+    const rol = localStorage.getItem('userRol') || (usuarioActual && usuarioActual.rol);
+    const estCache = estudiantesCache.find(est => est.id === id);
+    const ordenLista = estCache ? (estCache.orden || null) : null;
     try {
         const res  = await fetch(`${API}/estudiantes/${id}/ficha`);
         const data = await res.json();
@@ -1309,6 +1380,7 @@ async function mostrarFichaEstudiante(id) {
                 <div class="ficha-grid-2">
                     <div class="ficha-section">
                         <h4 class="ficha-section-title">Datos Personales</h4>
+                        ${ordenLista !== null ? `<div class="ficha-campo"><span>N° de Lista:</span><strong style="color:#1565c0">${ordenLista}</strong></div>` : ""}
                         <div class="ficha-campo"><span>Cedula:</span><strong>${e.cedula || "—"}</strong></div>
                         <div class="ficha-campo"><span>Nacimiento:</span><strong>${fnac}</strong></div>
                         <div class="ficha-campo"><span>Sexo:</span><strong>${e.sexo === "M" ? "Masculino" : e.sexo === "F" ? "Femenino" : "—"}</strong></div>
@@ -1360,6 +1432,7 @@ async function mostrarFichaEstudiante(id) {
                     <div id="participaciones-lista-${e.id}">${partsHTML}</div>
                 </div>
 
+                ${rol !== 'docente' ? `
                 <div class="ficha-section" style="background:#f9f9f9;border-top:2px solid #0d2352;padding-top:20px">
                     <h4 class="ficha-section-title">Boletín Estudiantil</h4>
                     <div style="display:flex;gap:12px;flex-wrap:wrap">
@@ -1372,7 +1445,7 @@ async function mostrarFichaEstudiante(id) {
                             📊 Descargar Boletín Excel
                         </button>
                     </div>
-                </div>
+                </div>` : ''}
             </div>`;
 
     } catch (err) {
