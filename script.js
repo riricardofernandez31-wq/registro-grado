@@ -491,34 +491,6 @@ async function cargarDashboard() {
             ).join("");
         }
 
-        // Llenar tabla de Top 5 alertas académicas
-        try {
-            const alertRes = await fetch(`${API}/dashboard/alertas-academicas`);
-            const alertas = alertRes.ok ? await alertRes.json() : [];
-            const tbodyAlertas = document.getElementById("tablaAlertas");
-            if (!tbodyAlertas) return;
-            
-            if (!Array.isArray(alertas) || alertas.length === 0) {
-                tbodyAlertas.innerHTML = '<tr><td colspan="3" class="empty-row">No hay alertas académicas.</td></tr>';
-            } else {
-                const top5 = alertas.slice(0, 5);
-                tbodyAlertas.innerHTML = top5.map(a => {
-                    let nivelColor = 'background: #2e7d32; color: #fff;';
-                    if (a.promedio < 60) {
-                        nivelColor = 'background: #c62828; color: #fff;';
-                    } else if (a.promedio < 75) {
-                        nivelColor = 'background: #e65100; color: #fff;';
-                    } else if (a.promedio < 85) {
-                        nivelColor = 'background: #f57f17; color: #fff;';
-                    }
-                    return `<tr><td>${a.nombre_estudiante || a.nombre}</td><td>${a.promedio ? a.promedio.toFixed(1) : '—'}</td><td><span style="${nivelColor} padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600;">${a.nivel || 'Bajo'}</span></td></tr>`;
-                }).join("");
-            }
-        } catch (err) { 
-            console.warn("Error cargando alertas académicas:", err);
-            const tbodyAlertas = document.getElementById("tablaAlertas");
-            if (tbodyAlertas) tbodyAlertas.innerHTML = '<tr><td colspan="3" class="empty-row">Error al cargar alertas</td></tr>';
-        }
     } catch (err) { console.error("Error dashboard:", err); }
 }
 

@@ -168,25 +168,10 @@
                 </div>
             </div>
 
-            <!-- SECCIÓN 2: GRÁFICA Y TABLA DE ALERTAS EN UNA FILA -->
-            <div class="dashboard-main" style="display: grid; grid-template-columns: 60% 40%; gap: 24px; margin: 24px 0;">
-                <!-- Gráfica de Promedio por Grado (60%) -->
-                <div class="panel">
-                    <h3 class="panel-title">Promedio Académico por Grado</h3>
-                    <canvas id="chartPromedioGrado" height="300"></canvas>
-                </div>
-                <!-- Tabla de Top 5 Alertas (40%) -->
-                <div class="panel">
-                    <h3 class="panel-title">Top 5 Alertas</h3>
-                    <div class="table-wrap"><table class="data-table" style="font-size: 12px;">
-                        <thead>
-                            <tr><th>Estudiante</th><th>Promedio</th><th>Nivel</th></tr>
-                        </thead>
-                        <tbody id="tablaAlertas">
-                            <tr><td colspan="3" class="empty-row">Cargando...</td></tr>
-                        </tbody>
-                    </table></div>
-                </div>
+            <!-- SECCIÓN 2: GRÁFICA ANCHO COMPLETO -->
+            <div class="panel" style="margin: 24px 0;">
+                <h3 class="panel-title">Promedio Académico por Grado</h3>
+                <canvas id="chartPromedioGrado" height="120"></canvas>
             </div>
 
             <!-- SECCIÓN 3: ÚLTIMOS ESTUDIANTES REGISTRADOS -->
