@@ -12,6 +12,8 @@ let usuarioActual    = null;
 let estudiantesCache = [];
 let editandoEstudianteId = null;
 let aulasCache = [];
+let aulasDocente = [];
+let aulaSeleccionada = null;
 let maestrosCache = [];
 let editandoAulaId = null;
 let chartPromedioGrado = null;
@@ -211,6 +213,7 @@ document.getElementById("loginForm").addEventListener("submit", async function(e
         errorDiv.style.display = "none";
         usuarioActual = data.usuario;
         localStorage.setItem('userRol', data.usuario.rol);
+        localStorage.setItem('usuarioId', data.usuario.id);
         document.getElementById("userNameDisplay").textContent = data.usuario.nombre;
         document.getElementById("userRolBadge").textContent    = formatRol(data.usuario.rol);
         document.getElementById("loginContainer").style.display = "none";
@@ -218,8 +221,14 @@ document.getElementById("loginForm").addEventListener("submit", async function(e
         aplicarPermisos(data.usuario.rol);
         aplicarVistaRol(data.usuario.rol);
         cargarNombreCentro();
-        const seccionInicial = data.usuario.rol === "docente" ? "asistencia" : "inicio";
-        mostrarSeccion(seccionInicial);
+        
+        // Para docentes, mostrar pantalla de selección de aula
+        if (data.usuario.rol === "docente") {
+            await cargarAulasDocente(data.usuario.id);
+            mostrarSeleccionAula();
+        } else {
+            mostrarSeccion("inicio");
+        }
 
     } catch (err) {
         errorDiv.textContent   = "No se pudo conectar al servidor. Esta corriendo Node.js?";
@@ -305,7 +314,13 @@ async function cargarNombreCentro() {
 document.getElementById("btnLogout").addEventListener("click", function() {
     usuarioActual    = null;
     estudiantesCache = [];
+    aulaSeleccionada = null;
+    aulasDocente     = [];
     localStorage.removeItem('userRol');
+    localStorage.removeItem('usuarioId');
+    localStorage.removeItem('aulaSeleccionadaId');
+    const badge = document.getElementById("aulaActivaBadge");
+    if (badge) badge.style.display = "none";
     document.getElementById("dashboard").style.display      = "none";
     document.getElementById("loginContainer").style.display = "flex";
     document.getElementById("loginForm").reset();
@@ -600,9 +615,15 @@ async function cargarSelectEstudiantes() {
         const data = await res.json();
         if (!res.ok || !Array.isArray(data)) return;
         estudiantesCache = data;
+
+        // Para docentes con aula seleccionada, filtrar solo sus estudiantes
+        const lista = aulaSeleccionada
+            ? data.filter(est => String(est.aula_id) === String(aulaSeleccionada.id))
+            : data;
+
         const select = document.getElementById("cal-estudiante");
         select.innerHTML = '<option value="">Seleccione estudiante</option>';
-        data.forEach(function(est) {
+        lista.forEach(function(est) {
             const opt = document.createElement("option");
             opt.value       = est.id;
             opt.textContent = `${est.nombre} (${est.grado}${est.seccion ? " - "+est.seccion : ""})`;
@@ -705,11 +726,18 @@ async function cargarAsistencia() {
         estudiantesCache = data;
         aulasCache = Array.isArray(aulas) ? aulas : [];
 
+        // Para docentes con aula seleccionada, mostrar solo sus estudiantes
+        const listaAsis = aulaSeleccionada
+            ? data.filter(est => String(est.aula_id) === String(aulaSeleccionada.id))
+            : data;
+
         const contenedor = document.getElementById("listaAsistencia");
-        if (data.length === 0) {
-            contenedor.innerHTML = '<p class="empty-row">Registre estudiantes primero.</p>';
+        if (listaAsis.length === 0) {
+            contenedor.innerHTML = aulaSeleccionada
+                ? '<p class="empty-row">No hay estudiantes activos en el aula seleccionada.</p>'
+                : '<p class="empty-row">Registre estudiantes primero para tomar asistencia.</p>';
         } else {
-            contenedor.innerHTML = data.map(est => `
+            contenedor.innerHTML = listaAsis.map(est => `
                 <div class="asistencia-row">
                     <span class="asistencia-nombre">${est.nombre}</span>
                     <label><input type="radio" name="as-${est.id}" value="presente" checked> Presente</label>
@@ -724,6 +752,10 @@ async function cargarAsistencia() {
             selectAula.innerHTML = '<option value="">Seleccione un aula</option>' + aulasCache
                 .map(a => `<option value="${a.id}">${a.aula_numero || a.grado + '-' + a.seccion}</option>`)
                 .join("");
+            // Pre-seleccionar el aula activa para docentes
+            if (aulaSeleccionada) {
+                selectAula.value = String(aulaSeleccionada.id);
+            }
         }
 
         const fechaParticipaciones = document.getElementById("fechaParticipaciones");
@@ -855,9 +887,12 @@ async function guardarParticipacionesAula() {
 }
 
 document.getElementById("btnGuardarAsistencia").addEventListener("click", async function() {
-    if (estudiantesCache.length === 0) return;
+    const listaEst = aulaSeleccionada
+        ? estudiantesCache.filter(e => String(e.aula_id) === String(aulaSeleccionada.id))
+        : estudiantesCache;
+    if (listaEst.length === 0) return;
     const fechaHoy  = hoy.toISOString().split("T")[0];
-    const registros = estudiantesCache.map(function(est) {
+    const registros = listaEst.map(function(est) {
         const sel = document.querySelector(`input[name="as-${est.id}"]:checked`);
         return { estudiante_id:est.id, fecha:fechaHoy, estado:sel?sel.value:"presente", observacion:"" };
     });
@@ -1091,7 +1126,7 @@ async function buscarEstudiantes() {
     contenedor.innerHTML = '<p style="color:#888;padding:12px 0">Buscando...</p>';
     try {
         const res  = await fetch(`${API}/estudiantes/buscar?${params.toString()}`);
-        const data = await res.json();
+        let data = await res.json();
         if (!res.ok) {
             contenedor.innerHTML = '<p class="empty-row">Error del servidor: ' + (data.detalle || data.error || res.status) + '</p>';
             return;
@@ -1100,8 +1135,19 @@ async function buscarEstudiantes() {
             contenedor.innerHTML = '<p class="empty-row">No se encontraron estudiantes.</p>';
             return;
         }
+
+        // Para docentes: mostrar primero los del aula activa
+        if (aulaSeleccionada) {
+            const aulaId = String(aulaSeleccionada.id);
+            data = [
+                ...data.filter(e => String(e.aula_id) === aulaId),
+                ...data.filter(e => String(e.aula_id) !== aulaId)
+            ];
+        }
+
+        const aulaActivaId = aulaSeleccionada ? String(aulaSeleccionada.id) : null;
         contenedor.innerHTML = `
-            <p style="color:#888;font-size:13px;margin-bottom:12px">${data.length} estudiante(s) encontrado(s)</p>
+            <p style="color:#888;font-size:13px;margin-bottom:12px">${data.length} estudiante(s) encontrado(s)${aulaSeleccionada ? ' · Los del aula activa aparecen primero' : ''}</p>
             <div style="overflow-x:auto">
             <table class="data-table">
                 <thead><tr>
@@ -1109,15 +1155,18 @@ async function buscarEstudiantes() {
                     <th>Grado</th><th>Seccion</th><th>Accion</th>
                 </tr></thead>
                 <tbody>
-                    ${data.map(function(e, i) { return `<tr>
-                        <td>${i + 1}</td>
-                        <td><strong>${e.nombre}</strong></td>
-                        <td>${e.matricula}</td>
-                        <td>${e.cedula || "—"}</td>
-                        <td>${e.grado}</td>
-                        <td>${e.seccion || "—"}</td>
-                        <td><button onclick="mostrarFichaEstudiante(${e.id})" class="btn-ver-ficha">Ver Ficha</button></td>
-                    </tr>`; }).join("")}
+                    ${data.map(function(e, i) {
+                        const esDeAula = aulaActivaId && String(e.aula_id) === aulaActivaId;
+                        return `<tr${esDeAula ? ' style="background:#f0f7ff"' : ''}>
+                            <td>${i + 1}</td>
+                            <td><strong>${e.nombre}</strong>${esDeAula ? ' <span style="background:#1565c0;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">Mi aula</span>' : ''}</td>
+                            <td>${e.matricula}</td>
+                            <td>${e.cedula || "—"}</td>
+                            <td>${e.grado}</td>
+                            <td>${e.seccion || "—"}</td>
+                            <td><button onclick="mostrarFichaEstudiante(${e.id})" class="btn-ver-ficha">Ver Ficha</button></td>
+                        </tr>`;
+                    }).join("")}
                 </tbody>
             </table>
             </div>`;
@@ -1593,3 +1642,74 @@ document.querySelector('[data-section="aulas"]')?.addEventListener("click", func
     cargarMaestrosDropdown();
     cargarTablaAulas();
 });
+
+// =============================================
+//  SELECCIÓN DE AULA (DOCENTES)
+// =============================================
+
+async function cargarAulasDocente(usuarioId) {
+    try {
+        const res = await fetch(`${API}/docente/mis-aulas?usuario_id=${usuarioId}`);
+        const data = await res.json();
+        aulasDocente = Array.isArray(data) ? data : [];
+    } catch (err) {
+        aulasDocente = [];
+        console.error("Error cargando aulas del docente:", err);
+    }
+}
+
+function mostrarSeleccionAula() {
+    document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
+    const sec = document.getElementById("sec-seleccion-aula");
+    if (sec) sec.classList.add("active");
+
+    document.getElementById("sectionTitle").textContent = "Selección de Aula";
+    document.getElementById("welcomeMsg").textContent   = "";
+    document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+
+    const nombre = usuarioActual?.nombre || document.getElementById("userNameDisplay").textContent || "Docente";
+    const titulo = document.getElementById("seleccionTitulo");
+    if (titulo) titulo.textContent = `Bienvenido/a, ${nombre}`;
+
+    const grid = document.getElementById("aulasGrid");
+    if (!grid) return;
+
+    if (aulasDocente.length === 0) {
+        grid.innerHTML = `
+            <div style="grid-column:1/-1;text-align:center;padding:60px 20px">
+                <p style="font-size:48px;margin-bottom:16px">🏫</p>
+                <p style="color:#555;font-size:18px;font-weight:600;margin-bottom:8px">Sin aulas asignadas</p>
+                <p style="color:#888;font-size:14px">No tienes aulas asignadas en este momento.<br>Contacta al administrador del centro.</p>
+            </div>`;
+        return;
+    }
+
+    grid.innerHTML = aulasDocente.map(aula => `
+        <div class="aula-card" onclick="seleccionarAula(${aula.id})">
+            <div class="aula-card-icon">🏫</div>
+            <div class="aula-card-grado">${aula.grado}</div>
+            <div class="aula-card-seccion">Sección ${aula.seccion}</div>
+            <div class="aula-card-nombre">${aula.aula_numero || aula.grado + ' - ' + aula.seccion}</div>
+            <div class="aula-card-estudiantes">${aula.cantidad_estudiantes || 0} estudiantes</div>
+        </div>
+    `).join("");
+}
+
+function seleccionarAula(aulaId) {
+    aulaSeleccionada = aulasDocente.find(a => a.id === aulaId) || null;
+    if (!aulaSeleccionada) return;
+
+    localStorage.setItem('aulaSeleccionadaId', String(aulaId));
+
+    const badge = document.getElementById("aulaActivaBadge");
+    const aulaActivaNombre = document.getElementById("aulaActivaNombre");
+    if (badge && aulaActivaNombre) {
+        aulaActivaNombre.textContent = aulaSeleccionada.aula_numero || `${aulaSeleccionada.grado} ${aulaSeleccionada.seccion}`;
+        badge.style.display = "inline-flex";
+    }
+
+    mostrarSeccion("asistencia");
+    document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+    document.querySelector('[data-section="asistencia"]')?.classList.add("active");
+    showToast(`Aula ${aulaSeleccionada.aula_numero || aulaSeleccionada.grado + ' ' + aulaSeleccionada.seccion} seleccionada`, "success");
+}

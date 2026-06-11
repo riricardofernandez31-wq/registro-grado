@@ -91,10 +91,29 @@
                 </div>
             </div>
             <div class="topbar-user">
+                <span id="aulaActivaBadge" style="display: none; background: #1565c0; color: white; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; margin-right: 12px; cursor: pointer;" onclick="mostrarSeleccionAula()" title="Cambiar aula">
+                    Aula: <span id="aulaActivaNombre">-</span> ✏️
+                </span>
                 <span class="user-badge" id="userRolBadge">Director</span>
                 <span id="userNameDisplay">admin</span>
             </div>
         </header>
+
+        <!-- SELECCION DE AULA (SOLO DOCENTES) -->
+        <section id="sec-seleccion-aula" class="section">
+            <div class="selection-container">
+                <div class="selection-header">
+                    <h1 id="seleccionTitulo">Bienvenido/a</h1>
+                    <p class="selection-subtitle">Selecciona el aula con la que trabajarás hoy</p>
+                </div>
+                <div class="aulas-grid" id="aulasGrid">
+                    <!-- Las tarjetas se generarán dinámicamente -->
+                    <div style="grid-column: 1/-1; text-align: center; padding: 40px;">
+                        <p style="color: #888; font-size: 16px;">Cargando aulas...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
 
         <!-- INICIO -->
         <section id="sec-inicio" class="section active">

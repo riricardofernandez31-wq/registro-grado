@@ -582,6 +582,67 @@ app.delete("/api/aulas/:id", function(req, res) {
 });
 
 // =============================================
+//  DOCENTES - AULAS ASIGNADAS
+// =============================================
+
+// GET /api/docente/mis-aulas?usuario_id=X
+app.get("/api/docente/mis-aulas", function(req, res) {
+    const usuario_id = parseInt(req.query.usuario_id, 10);
+    if (!usuario_id) return res.status(400).json({ error: "usuario_id requerido." });
+
+    const sql = `
+        SELECT DISTINCT a.id, a.grado, a.seccion, a.aula_numero, a.capacidad,
+               u.nombre AS nombre_maestro,
+               (SELECT COUNT(*) FROM estudiantes WHERE aula_id = a.id AND activo = 1) AS cantidad_estudiantes
+        FROM aulas a
+        LEFT JOIN usuarios u ON a.maestro_guia_id = u.id
+        WHERE a.maestro_guia_id = ?
+           OR a.id IN (
+               SELECT DISTINCT aula_id FROM asignaciones
+               JOIN maestros m ON asignaciones.maestro_id = m.id
+               WHERE m.usuario_id = ?
+           )
+        ORDER BY a.grado, a.seccion
+    `;
+
+    db.query(sql, [usuario_id, usuario_id], function(err, results) {
+        if (err) {
+            console.error("GET /api/docente/mis-aulas:", err.message);
+            return res.status(500).json({ error: "Error al obtener aulas.", detalle: err.message });
+        }
+        res.json(results || []);
+    });
+});
+
+app.get("/api/docente/:usuario_id/mis-aulas", function(req, res) {
+    const usuario_id = parseInt(req.params.usuario_id, 10);
+    
+    // Obtener aulas donde el docente es maestro_guía OR tiene asignaciones
+    const sql = `
+        SELECT DISTINCT a.id, a.grado, a.seccion, a.aula_numero, a.capacidad,
+               u.nombre AS nombre_maestro,
+               (SELECT COUNT(*) FROM estudiantes WHERE aula_id = a.id AND activo = 1) AS cantidad_estudiantes
+        FROM aulas a
+        LEFT JOIN usuarios u ON a.maestro_guia_id = u.id
+        WHERE a.maestro_guia_id = ?
+           OR a.id IN (
+               SELECT DISTINCT aula_id FROM asignaciones
+               JOIN maestros m ON asignaciones.maestro_id = m.id
+               WHERE m.usuario_id = ?
+           )
+        ORDER BY a.grado, a.seccion
+    `;
+    
+    db.query(sql, [usuario_id, usuario_id], function(err, results) {
+        if (err) {
+            console.error("GET /api/docente/mis-aulas:", err.message);
+            return res.status(500).json({ error: "Error al obtener aulas.", detalle: err.message });
+        }
+        res.json(results || []);
+    });
+});
+
+// =============================================
 //  MAESTROS
 // =============================================
 // Retorna usuarios activos que pueden ser asignados como Maestro Guía en Aulas.
