@@ -20,6 +20,36 @@ let chartPromedioGrado = null;
 let mostrarTodosEstudiantes = false;
 let formAsistenciaDirty = false;
 
+// =============================================
+//  CACHÉ DE API (TTL 60s)
+// =============================================
+const _apiCache = {};
+const CACHE_TTL = 60000;
+
+async function fetchCached(url, ttl) {
+    const now = Date.now();
+    const entry = _apiCache[url];
+    if (entry && (now - entry.ts) < (ttl !== undefined ? ttl : CACHE_TTL)) {
+        return entry.data;
+    }
+    const res = await fetch(url);
+    if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(e.error || `HTTP ${res.status}`), { status: res.status });
+    }
+    const data = await res.json();
+    _apiCache[url] = { data, ts: now };
+    return data;
+}
+
+function invalidateCache(...patterns) {
+    patterns.forEach(pat => {
+        Object.keys(_apiCache).forEach(url => {
+            if (url.includes(pat)) delete _apiCache[url];
+        });
+    });
+}
+
 function parseFechaMySQL(fecha) {
     if (!fecha) return null;
     const s = String(fecha).substring(0, 10);
@@ -228,11 +258,41 @@ window.addEventListener("load", async function() {
         if (data.nombre_centro)
             document.getElementById("loginNombreCentro").textContent = data.nombre_centro;
     } catch (err) {}
-    
-    // Restaurar sesión si existe rol guardado en localStorage
-    const userRol = localStorage.getItem('userRol');
-    if (userRol) {
+
+    const userRol  = localStorage.getItem('userRol');
+    const userId   = localStorage.getItem('usuarioId');
+    const userName = localStorage.getItem('userName');
+
+    if (userRol && userId && userName) {
+        // Restaurar sesión completa sin re-login
+        usuarioActual = { id: parseInt(userId, 10), nombre: userName, rol: userRol };
+        document.getElementById("userNameDisplay").textContent = userName;
+        document.getElementById("userRolBadge").textContent    = formatRol(userRol);
+        aplicarPermisos(userRol);
         aplicarVistaRol(userRol);
+        cargarNombreCentro();
+
+        if (userRol === 'docente') {
+            await cargarAulasDocente(parseInt(userId, 10));
+            const savedAulaId = localStorage.getItem('aulaSeleccionadaId');
+            if (savedAulaId && aulasDocente.length) {
+                aulaSeleccionada = aulasDocente.find(a => String(a.id) === savedAulaId) || null;
+                if (aulaSeleccionada) {
+                    const badge = document.getElementById("aulaActivaBadge");
+                    const aulaActivaNombre = document.getElementById("aulaActivaNombre");
+                    if (badge && aulaActivaNombre) {
+                        aulaActivaNombre.textContent = aulaSeleccionada.aula_numero
+                            || `${aulaSeleccionada.grado} ${aulaSeleccionada.seccion}`;
+                        badge.style.display = "inline-flex";
+                    }
+                }
+            }
+        }
+
+        document.getElementById("loginContainer").style.display = "none";
+        document.getElementById("dashboard").style.display      = "flex";
+        mostrarSeccion("inicio");
+        document.querySelector('[data-section="inicio"]')?.classList.add("active");
     }
 });
 
@@ -259,6 +319,7 @@ document.getElementById("loginForm").addEventListener("submit", async function(e
         usuarioActual = data.usuario;
         localStorage.setItem('userRol', data.usuario.rol);
         localStorage.setItem('usuarioId', data.usuario.id);
+        localStorage.setItem('userName', data.usuario.nombre);
         document.getElementById("userNameDisplay").textContent = data.usuario.nombre;
         document.getElementById("userRolBadge").textContent    = formatRol(data.usuario.rol);
         document.getElementById("loginContainer").style.display = "none";
@@ -354,6 +415,7 @@ document.getElementById("btnLogout").addEventListener("click", function() {
         formAsistenciaDirty = false;
         localStorage.removeItem('userRol');
         localStorage.removeItem('usuarioId');
+        localStorage.removeItem('userName');
         localStorage.removeItem('aulaSeleccionadaId');
         const badge = document.getElementById("aulaActivaBadge");
         if (badge) badge.style.display = "none";
@@ -567,6 +629,7 @@ document.getElementById("formEstudiante").addEventListener("submit", async funct
         msg.textContent   = editandoEstudianteId ? "Estudiante actualizado exitosamente." : "Estudiante guardado exitosamente.";
         msg.style.display = "block";
         setTimeout(() => msg.style.display = "none", 3000);
+        invalidateCache('estudiantes');
         cargarTablaEstudiantes();
     } catch (err) { showToast("No se pudo conectar al servidor.", "error"); }
 });
@@ -605,7 +668,7 @@ async function eliminarEstudiante(id, nombre) {
     showConfirm(`¿Está seguro que desea eliminar al estudiante "${nombre}"?`, () => {
         fetch(`${API}/estudiantes/${id}`, { method:"DELETE" })
         .then(res => { if (!res.ok) { showToast("Error al eliminar.", "error"); return; }
-        cargarTablaEstudiantes(); })
+        invalidateCache('estudiantes'); cargarTablaEstudiantes(); })
         .catch(err => { showToast("No se pudo conectar al servidor.", "error"); });
     }, () => {});
     return;
@@ -618,12 +681,8 @@ async function eliminarEstudiante(id, nombre) {
 
 async function cargarTablaEstudiantes() {
     try {
-        const res  = await fetch(`${API}/estudiantes`);
-        const data = await res.json();
-        if (!res.ok || !Array.isArray(data)) {
-            console.error("Estudiantes error:", data.detalle || data.error || data);
-            return;
-        }
+        const data = await fetchCached(`${API}/estudiantes`);
+        if (!Array.isArray(data)) return;
         estudiantesCache = data;
         const tbody = document.getElementById("tablaEstudiantes");
         if (data.length === 0) {
@@ -655,9 +714,8 @@ async function cargarTablaEstudiantes() {
 // =============================================
 async function cargarSelectEstudiantes() {
     try {
-        const res  = await fetch(`${API}/estudiantes`);
-        const data = await res.json();
-        if (!res.ok || !Array.isArray(data)) return;
+        const data = await fetchCached(`${API}/estudiantes`);
+        if (!Array.isArray(data)) return;
         estudiantesCache = data;
 
         // Para docentes con aula seleccionada, filtrar solo sus estudiantes
@@ -764,13 +822,11 @@ async function cargarAsistencia() {
     try {
         const rol = localStorage.getItem('userRol') || (usuarioActual && usuarioActual.rol);
 
-        const [resEst, resAulas] = await Promise.all([
-            fetch(`${API}/estudiantes`),
-            fetch(`${API}/aulas`)
+        const [data, aulas] = await Promise.all([
+            fetchCached(`${API}/estudiantes`),
+            fetchCached(`${API}/aulas`)
         ]);
-        const data = await resEst.json();
-        const aulas = await resAulas.json();
-        if (!resEst.ok || !Array.isArray(data)) return;
+        if (!Array.isArray(data)) return;
         estudiantesCache = data;
         aulasCache = Array.isArray(aulas) ? aulas : [];
 
@@ -1506,9 +1562,7 @@ async function agregarParticipacion(estudianteId) {
 
 async function cargarMaestrosDropdown() {
     try {
-        const res = await fetch(`${API}/maestros`);
-        const data = await res.json();
-        if (!res.ok) return;
+        const data = await fetchCached(`${API}/maestros`);
         maestrosCache = data;
         const select = document.getElementById("aula-maestro-guia");
         if (!select) return;
@@ -1519,9 +1573,8 @@ async function cargarMaestrosDropdown() {
 
 async function cargarTablaAulas() {
     try {
-        const res = await fetch(`${API}/aulas`);
-        const data = await res.json();
-        if (!res.ok || !Array.isArray(data)) return;
+        const data = await fetchCached(`${API}/aulas`);
+        if (!Array.isArray(data)) return;
 
         aulasCache = data;
         const tbody = document.getElementById("tablaAulas");
@@ -1596,6 +1649,7 @@ document.getElementById("formAula")?.addEventListener("submit", async function(e
             setTimeout(() => msg.style.display = "none", 3000);
         }
 
+        invalidateCache('aulas');
         cargarTablaAulas();
     } catch (err) { showToast("No se pudo conectar al servidor.", "error"); }
 });
@@ -1634,7 +1688,7 @@ async function eliminarAula(id, nombre) {
     showConfirm(`¿Está seguro que desea eliminar el aula "${nombre}"?`, () => {
         fetch(`${API}/aulas/${id}`, { method: "DELETE" })
         .then(res => { if (!res.ok) { showToast("Error al eliminar.", "error"); return; }
-        cargarTablaAulas(); })
+        invalidateCache('aulas'); cargarTablaAulas(); })
         .catch(err => { showToast("No se pudo conectar.", "error"); });
     }, () => {});
     return;
@@ -1792,8 +1846,7 @@ document.querySelector('[data-section="aulas"]')?.addEventListener("click", func
 
 async function cargarAulasDocente(usuarioId) {
     try {
-        const res = await fetch(`${API}/docente/mis-aulas?usuario_id=${usuarioId}`);
-        const data = await res.json();
+        const data = await fetchCached(`${API}/docente/mis-aulas?usuario_id=${usuarioId}`);
         aulasDocente = Array.isArray(data) ? data : [];
     } catch (err) {
         aulasDocente = [];
