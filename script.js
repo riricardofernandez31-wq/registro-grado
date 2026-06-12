@@ -252,48 +252,61 @@ function showPrompt(mensaje, defaultValue = '') {
 //  LOGIN
 // =============================================
 window.addEventListener("load", async function() {
-    try {
-        const res  = await fetch(`${API}/configuracion`);
-        const data = await res.json();
-        if (data.nombre_centro)
-            document.getElementById("loginNombreCentro").textContent = data.nombre_centro;
-    } catch (err) {}
+    const loading = document.getElementById('appLoading');
+
+    // Cargar nombre del centro en segundo plano — no bloquea la sesión
+    fetch(`${API}/configuracion`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.nombre_centro)
+                document.getElementById("loginNombreCentro").textContent = data.nombre_centro;
+        })
+        .catch(() => {});
 
     const userRol  = localStorage.getItem('userRol');
     const userId   = localStorage.getItem('usuarioId');
     const userName = localStorage.getItem('userName');
 
     if (userRol && userId && userName) {
-        // Restaurar sesión completa sin re-login
-        usuarioActual = { id: parseInt(userId, 10), nombre: userName, rol: userRol };
-        document.getElementById("userNameDisplay").textContent = userName;
-        document.getElementById("userRolBadge").textContent    = formatRol(userRol);
-        aplicarPermisos(userRol);
-        aplicarVistaRol(userRol);
-        cargarNombreCentro();
+        try {
+            usuarioActual = { id: parseInt(userId, 10), nombre: userName, rol: userRol };
+            document.getElementById("userNameDisplay").textContent = userName;
+            document.getElementById("userRolBadge").textContent    = formatRol(userRol);
+            aplicarPermisos(userRol);
+            aplicarVistaRol(userRol);
+            cargarNombreCentro();
 
-        if (userRol === 'docente') {
-            await cargarAulasDocente(parseInt(userId, 10));
-            const savedAulaId = localStorage.getItem('aulaSeleccionadaId');
-            if (savedAulaId && aulasDocente.length) {
-                aulaSeleccionada = aulasDocente.find(a => String(a.id) === savedAulaId) || null;
-                if (aulaSeleccionada) {
-                    const badge = document.getElementById("aulaActivaBadge");
-                    const aulaActivaNombre = document.getElementById("aulaActivaNombre");
-                    if (badge && aulaActivaNombre) {
-                        aulaActivaNombre.textContent = aulaSeleccionada.aula_numero
-                            || `${aulaSeleccionada.grado} ${aulaSeleccionada.seccion}`;
-                        badge.style.display = "inline-flex";
+            if (userRol === 'docente') {
+                await cargarAulasDocente(parseInt(userId, 10));
+                const savedAulaId = localStorage.getItem('aulaSeleccionadaId');
+                if (savedAulaId && aulasDocente.length) {
+                    aulaSeleccionada = aulasDocente.find(a => String(a.id) === savedAulaId) || null;
+                    if (aulaSeleccionada) {
+                        const badge = document.getElementById("aulaActivaBadge");
+                        const aulaActivaNombre = document.getElementById("aulaActivaNombre");
+                        if (badge && aulaActivaNombre) {
+                            aulaActivaNombre.textContent = aulaSeleccionada.aula_numero
+                                || `${aulaSeleccionada.grado} ${aulaSeleccionada.seccion}`;
+                            badge.style.display = "inline-flex";
+                        }
                     }
                 }
             }
-        }
 
-        document.getElementById("loginContainer").style.display = "none";
-        document.getElementById("dashboard").style.display      = "flex";
-        mostrarSeccion("inicio");
-        document.querySelector('[data-section="inicio"]')?.classList.add("active");
+            document.getElementById("dashboard").style.display = "flex";
+            mostrarSeccion("inicio");
+            document.querySelector('[data-section="inicio"]')?.classList.add("active");
+        } catch (err) {
+            // Falló la restauración — limpiar y mostrar login
+            console.warn("Restauración de sesión fallida:", err);
+            ['userRol','usuarioId','userName','aulaSeleccionadaId'].forEach(k => localStorage.removeItem(k));
+            document.getElementById("loginContainer").style.display = "flex";
+        }
+    } else {
+        document.getElementById("loginContainer").style.display = "flex";
     }
+
+    if (loading) loading.style.display = "none";
 });
 
 document.getElementById("loginForm").addEventListener("submit", async function(e) {
@@ -500,7 +513,7 @@ function mostrarSeccion(nombre) {
             if (panelDocente) panelDocente.style.display = 'none';
             if (panelAdmin) panelAdmin.style.display = '';
             cargarDashboard();
-            setTimeout(initGraficas, 500);
+            setTimeout(initGraficas, 100);
         }
     }
     if (nombre === "estudiantes")    cargarTablaEstudiantes();
@@ -953,10 +966,7 @@ async function cargarParticipacionesAula() {
 
     let existing = [];
     try {
-        const res = await fetch(`${API}/participaciones/aula/${aulaId}/fecha/${fecha}`);
-        if (res.ok) {
-            existing = await res.json();
-        }
+        existing = await fetchCached(`${API}/participaciones/aula/${aulaId}/fecha/${fecha}`, 30000);
     } catch (err) {
         console.warn("No se pudo cargar participaciones existentes:", err);
     }
@@ -1035,6 +1045,7 @@ async function guardarParticipacionesAula() {
             showToast(error.data?.error || "Ocurrió un error al guardar algunas participaciones.", "error");
             return;
         }
+        invalidateCache('participaciones');
         const msg = document.getElementById("msgParticipaciones");
         if (msg) {
             msg.style.display = "block";
@@ -1932,6 +1943,14 @@ function seleccionarAula(aulaId) {
         aulaActivaNombre.textContent = aulaSeleccionada.aula_numero || `${aulaSeleccionada.grado} ${aulaSeleccionada.seccion}`;
         badge.style.display = "inline-flex";
     }
+
+    // Pre-cargar datos del aula en background para que el primer tab sea instantáneo
+    fetchCached(`${API}/estudiantes`).then(data => {
+        if (Array.isArray(data)) estudiantesCache = data;
+    }).catch(() => {});
+    fetchCached(`${API}/aulas`).then(data => {
+        if (Array.isArray(data)) aulasCache = data;
+    }).catch(() => {});
 
     mostrarSeccion("asistencia");
     document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));

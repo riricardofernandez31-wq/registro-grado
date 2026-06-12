@@ -10,11 +10,19 @@
 </head>
 <body>
 
+<!-- ===================== LOADING OVERLAY ===================== -->
+<div id="appLoading" style="position:fixed;inset:0;background:#f0f4ff;display:flex;align-items:center;justify-content:center;z-index:9999;">
+    <div style="text-align:center">
+        <div style="font-size:48px">🏫</div>
+        <p style="color:#1F3864;font-weight:bold;margin-top:12px">Cargando sistema...</p>
+    </div>
+</div>
+
 <!-- ===================== TOAST NOTIFICATIONS ===================== -->
 <div id="toast-container"></div>
 
 <!-- ===================== LOGIN ===================== -->
-<div class="login-container" id="loginContainer">
+<div class="login-container" id="loginContainer" style="display:none">
     <div class="login-backdrop"></div>
     <div class="login-box">
         <div class="logo-section">

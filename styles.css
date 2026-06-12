@@ -518,7 +518,6 @@ body {
 .section {
     display: none;
     padding: 28px 32px;
-    animation: fadeIn 0.25s ease;
 }
 
 .section.active {
