@@ -826,52 +826,133 @@ app.put("/api/configuracion", function(req, res) {
 // =============================================
 app.get("/api/exportar/pdf/:tipo", function(req, res) {
     const tipo = req.params.tipo;
-    let sql = "", titulo = "", columnas = [];
+    const aulaId = req.query.aulaId ? parseInt(req.query.aulaId) : null;
+    let sql = "", titulo = "", columnas = [], params = [], landscape = false;
 
     if (tipo === "estudiantes") {
         sql = "SELECT nombre, matricula, grado, seccion, tutor, telefono FROM estudiantes WHERE activo=1 ORDER BY nombre";
         titulo = "Listado de Estudiantes";
         columnas = ["Nombre", "Matricula", "Grado", "Seccion", "Tutor", "Telefono"];
     } else if (tipo === "calificaciones") {
-        sql = "SELECT e.nombre AS estudiante, c.asignatura, c.parcial_1, c.parcial_2, c.final FROM calificaciones c JOIN estudiantes e ON c.estudiante_id = e.id ORDER BY e.nombre";
-        titulo = "Reporte de Calificaciones";
-        columnas = ["Estudiante", "Asignatura", "P1", "P2", "Promedio"];
+        if (aulaId) params.push(aulaId);
+        sql = `SELECT e.nombre AS estudiante, e.grado, e.seccion, c.asignatura,
+                      COALESCE(c.nota1,0) AS p1, COALESCE(c.nota2,0) AS p2,
+                      COALESCE(c.nota3,0) AS p3, COALESCE(c.nota4,0) AS p4,
+                      COALESCE(c.promedio_redondeado,0) AS promedio,
+                      CASE WHEN c.promedio_redondeado>=70 THEN 'Aprobado'
+                           WHEN c.promedio_redondeado>0 THEN 'Recuperacion'
+                           ELSE '-' END AS condicion
+               FROM calificaciones c JOIN estudiantes e ON c.estudiante_id=e.id
+               WHERE e.activo=1 ${aulaId ? 'AND e.aula_id=?' : ''}
+               ORDER BY e.grado, e.seccion, SUBSTRING_INDEX(e.nombre,' ',-1), c.asignatura`;
+        titulo = "Reporte de Notas";
+        columnas = ["N\xb0", "Estudiante", "Asignatura", "P1", "P2", "P3", "P4", "Promedio", "Condicion"];
+        landscape = true;
     } else if (tipo === "asistencia") {
-        sql = "SELECT e.nombre AS estudiante, DATE_FORMAT(a.fecha,'%d/%m/%Y') AS fecha, a.estado FROM asistencia a JOIN estudiantes e ON a.estudiante_id = e.id ORDER BY a.fecha DESC";
+        if (aulaId) params.push(aulaId);
+        sql = `SELECT e.nombre AS estudiante, DATE_FORMAT(a.fecha,'%d/%m/%Y') AS fecha, a.estado
+               FROM asistencia a JOIN estudiantes e ON a.estudiante_id=e.id
+               WHERE e.activo=1 ${aulaId ? 'AND e.aula_id=?' : ''}
+               ORDER BY a.fecha DESC, e.nombre`;
         titulo = "Reporte de Asistencia";
         columnas = ["Estudiante", "Fecha", "Estado"];
+    } else if (tipo === "asistencia-resumen") {
+        if (aulaId) params.push(aulaId);
+        sql = `SELECT e.nombre,
+                      SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END) AS presentes,
+                      SUM(CASE WHEN a.estado='ausente' THEN 1 ELSE 0 END) AS ausentes,
+                      SUM(CASE WHEN a.estado='tardanza' THEN 1 ELSE 0 END) AS tardanzas,
+                      ROUND(SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END)/NULLIF(COUNT(DISTINCT a.id),0)*100,1) AS pct
+               FROM estudiantes e LEFT JOIN asistencia a ON e.id=a.estudiante_id
+               WHERE e.activo=1 ${aulaId ? 'AND e.aula_id=?' : ''}
+               GROUP BY e.id, e.nombre
+               ORDER BY SUBSTRING_INDEX(e.nombre,' ',-1) ASC`;
+        titulo = "Resumen de Asistencia";
+        columnas = ["N\xb0", "Nombre", "Presentes", "Ausentes", "Tardanzas", "% Asistencia"];
+    } else if (tipo === "participaciones-resumen") {
+        if (aulaId) params.push(aulaId);
+        sql = `SELECT e.nombre,
+                      COALESCE(ROUND(AVG(NULLIF(p.puntuacion,0)),1),0) AS promedio,
+                      COUNT(p.id) AS total
+               FROM estudiantes e LEFT JOIN participaciones p ON e.id=p.estudiante_id
+               WHERE e.activo=1 ${aulaId ? 'AND e.aula_id=?' : ''}
+               GROUP BY e.id, e.nombre
+               ORDER BY SUBSTRING_INDEX(e.nombre,' ',-1) ASC`;
+        titulo = "Resumen de Participaciones";
+        columnas = ["N\xb0", "Nombre", "Promedio Participacion", "Total Registros"];
     } else {
         return res.status(400).json({ error: "Tipo no valido." });
     }
 
-    db.query(sql, function(err, rows) {
+    db.query(sql, params, function(err, rows) {
         if (err) return res.status(500).json({ error: "Error al generar PDF." });
-        const doc = new PDFKit({ margin: 40 });
+        const margin = landscape ? 30 : 40;
+        const doc = new PDFKit({ margin, layout: landscape ? 'landscape' : 'portrait' });
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="${tipo}.pdf"`);
         doc.pipe(res);
-        doc.fontSize(18).fillColor("#0d2352").text(titulo, { align: "center" });
-        doc.fontSize(10).fillColor("#666").text("Sistema de Registro de Grado Digital - MINERD", { align: "center" });
-        doc.moveDown();
-        const colW = (doc.page.width - 80) / columnas.length;
+        doc.fontSize(16).fillColor("#0d2352").text(titulo, { align: "center" });
+        doc.fontSize(9).fillColor("#666").text("Sistema de Registro de Grado Digital - MINERD", { align: "center" });
+        doc.moveDown(0.5);
+
+        const usableW = doc.page.width - margin * 2;
+        let colWidths;
+        if (tipo === "calificaciones") {
+            colWidths = [28, 155, 130, 30, 30, 30, 30, 55, 75];
+        } else {
+            const cw = usableW / columnas.length;
+            colWidths = columnas.map(() => cw);
+        }
+        const totalW = colWidths.reduce((a, b) => a + b, 0);
+
         let y = doc.y;
-        doc.rect(40, y, doc.page.width - 80, 20).fill("#0d2352");
+        doc.rect(margin, y, totalW, 20).fill("#0d2352");
         columnas.forEach(function(col, i) {
-            doc.fillColor("#fff").fontSize(10).text(col, 40 + i * colW + 4, y + 5, { width: colW - 8 });
+            const x = margin + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
+            doc.fillColor("#fff").fontSize(8).text(col, x + 3, y + 6, { width: colWidths[i] - 6 });
         });
         y += 22;
-        rows.forEach(function(row, idx) {
-            const vals = Object.values(row);
-            doc.rect(40, y, doc.page.width - 80, 18).fill(idx % 2 === 0 ? "#f4f7ff" : "#ffffff");
+
+        let nRow = 0, currentGroup = null;
+        rows.forEach(function(row) {
+            const raw = Object.values(row);
+            let vals;
+
+            if (tipo === "calificaciones") {
+                if (!aulaId) {
+                    const group = raw[1] + " " + raw[2];
+                    if (group !== currentGroup) {
+                        currentGroup = group;
+                        if (y > doc.page.height - 80) { doc.addPage(); y = margin + 10; }
+                        doc.rect(margin, y, totalW, 18).fill("#dde8f5");
+                        doc.fillColor("#0d2352").fontSize(8)
+                           .text("  " + raw[1] + " Secc. " + raw[2], margin + 6, y + 5, { width: totalW - 12 });
+                        y += 20;
+                    }
+                }
+                nRow++;
+                vals = [nRow, raw[0], raw[3], raw[4], raw[5], raw[6], raw[7], raw[8], raw[9]];
+            } else if (columnas[0] === "N\xb0") {
+                nRow++;
+                vals = [nRow].concat(raw);
+            } else {
+                nRow++;
+                vals = raw;
+            }
+
+            if (y > doc.page.height - 60) { doc.addPage(); y = margin + 10; }
+            doc.rect(margin, y, totalW, 18).fill(nRow % 2 === 0 ? "#f4f7ff" : "#ffffff");
             vals.forEach(function(val, i) {
-                doc.fillColor("#333").fontSize(9).text(
+                if (i >= colWidths.length) return;
+                const x = margin + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
+                doc.fillColor("#333").fontSize(8).text(
                     val !== null && val !== undefined ? String(val) : "-",
-                    40 + i * colW + 4, y + 4, { width: colW - 8 }
+                    x + 3, y + 4, { width: colWidths[i] - 6 }
                 );
             });
             y += 20;
-            if (y > doc.page.height - 60) { doc.addPage(); y = 40; }
         });
+
         doc.moveDown(2);
         doc.fontSize(8).fillColor("#aaa").text("Generado el " + new Date().toLocaleDateString("es-DO"), { align: "right" });
         doc.end();
@@ -883,25 +964,64 @@ app.get("/api/exportar/pdf/:tipo", function(req, res) {
 // =============================================
 app.get("/api/exportar/excel/:tipo", async function(req, res) {
     const tipo = req.params.tipo;
-    let sql = "", titulo = "", columnas = [];
+    const aulaId = req.query.aulaId ? parseInt(req.query.aulaId) : null;
+    let sql = "", titulo = "", columnas = [], params = [];
 
     if (tipo === "estudiantes") {
         sql = "SELECT nombre, matricula, grado, seccion, tutor, telefono, direccion FROM estudiantes WHERE activo=1 ORDER BY nombre";
         titulo = "Estudiantes";
         columnas = ["Nombre", "Matricula", "Grado", "Seccion", "Tutor", "Telefono", "Direccion"];
     } else if (tipo === "calificaciones") {
-        sql = "SELECT e.nombre AS estudiante, c.asignatura, c.competencia, c.parcial_1, c.parcial_2, c.final FROM calificaciones c JOIN estudiantes e ON c.estudiante_id = e.id ORDER BY e.nombre";
-        titulo = "Calificaciones";
-        columnas = ["Estudiante", "Asignatura", "Competencia", "P1", "P2", "Promedio"];
+        if (aulaId) params.push(aulaId);
+        sql = `SELECT e.nombre AS estudiante, e.grado, e.seccion, c.asignatura,
+                      COALESCE(c.nota1,0) AS p1, COALESCE(c.nota2,0) AS p2,
+                      COALESCE(c.nota3,0) AS p3, COALESCE(c.nota4,0) AS p4,
+                      COALESCE(c.promedio_redondeado,0) AS promedio,
+                      CASE WHEN c.promedio_redondeado>=70 THEN 'Aprobado'
+                           WHEN c.promedio_redondeado>0 THEN 'Recuperacion'
+                           ELSE '-' END AS condicion
+               FROM calificaciones c JOIN estudiantes e ON c.estudiante_id=e.id
+               WHERE e.activo=1 ${aulaId ? 'AND e.aula_id=?' : ''}
+               ORDER BY e.grado, e.seccion, SUBSTRING_INDEX(e.nombre,' ',-1), c.asignatura`;
+        titulo = "Notas";
+        columnas = ["N\xb0", "Estudiante", "Asignatura", "P1", "P2", "P3", "P4", "Promedio", "Condicion"];
     } else if (tipo === "asistencia") {
-        sql = "SELECT e.nombre AS estudiante, DATE_FORMAT(a.fecha,'%d/%m/%Y') AS fecha, a.estado, a.observacion FROM asistencia a JOIN estudiantes e ON a.estudiante_id = e.id ORDER BY a.fecha DESC";
+        if (aulaId) params.push(aulaId);
+        sql = `SELECT e.nombre AS estudiante, DATE_FORMAT(a.fecha,'%d/%m/%Y') AS fecha, a.estado, a.observacion
+               FROM asistencia a JOIN estudiantes e ON a.estudiante_id=e.id
+               WHERE e.activo=1 ${aulaId ? 'AND e.aula_id=?' : ''}
+               ORDER BY a.fecha DESC, e.nombre`;
         titulo = "Asistencia";
         columnas = ["Estudiante", "Fecha", "Estado", "Observacion"];
+    } else if (tipo === "asistencia-resumen") {
+        if (aulaId) params.push(aulaId);
+        sql = `SELECT e.nombre,
+                      SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END) AS presentes,
+                      SUM(CASE WHEN a.estado='ausente' THEN 1 ELSE 0 END) AS ausentes,
+                      SUM(CASE WHEN a.estado='tardanza' THEN 1 ELSE 0 END) AS tardanzas,
+                      ROUND(SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END)/NULLIF(COUNT(DISTINCT a.id),0)*100,1) AS pct
+               FROM estudiantes e LEFT JOIN asistencia a ON e.id=a.estudiante_id
+               WHERE e.activo=1 ${aulaId ? 'AND e.aula_id=?' : ''}
+               GROUP BY e.id, e.nombre
+               ORDER BY SUBSTRING_INDEX(e.nombre,' ',-1) ASC`;
+        titulo = "Asistencia Resumen";
+        columnas = ["N\xb0", "Nombre", "Presentes", "Ausentes", "Tardanzas", "% Asistencia"];
+    } else if (tipo === "participaciones-resumen") {
+        if (aulaId) params.push(aulaId);
+        sql = `SELECT e.nombre,
+                      COALESCE(ROUND(AVG(NULLIF(p.puntuacion,0)),1),0) AS promedio,
+                      COUNT(p.id) AS total
+               FROM estudiantes e LEFT JOIN participaciones p ON e.id=p.estudiante_id
+               WHERE e.activo=1 ${aulaId ? 'AND e.aula_id=?' : ''}
+               GROUP BY e.id, e.nombre
+               ORDER BY SUBSTRING_INDEX(e.nombre,' ',-1) ASC`;
+        titulo = "Participaciones Resumen";
+        columnas = ["N\xb0", "Nombre", "Promedio Participacion", "Total Registros"];
     } else {
         return res.status(400).json({ error: "Tipo no valido." });
     }
 
-    db.query(sql, async function(err, rows) {
+    db.query(sql, params, async function(err, rows) {
         if (err) return res.status(500).json({ error: "Error al generar Excel." });
         const workbook  = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet(titulo);
@@ -914,11 +1034,37 @@ app.get("/api/exportar/excel/:tipo", async function(req, res) {
             cell.border = { top:{style:"thin"}, left:{style:"thin"}, bottom:{style:"thin"}, right:{style:"thin"} };
         });
         headerRow.height = 22;
-        rows.forEach(function(row, idx) {
-            const vals    = Object.values(row).map(v => v !== null && v !== undefined ? v : "-");
+        let nRow = 0, currentGroup = null;
+        rows.forEach(function(row) {
+            const raw = Object.values(row).map(v => v !== null && v !== undefined ? v : "-");
+            let vals;
+            if (tipo === "calificaciones") {
+                if (!aulaId) {
+                    const group = String(raw[1]) + " " + String(raw[2]);
+                    if (group !== currentGroup) {
+                        currentGroup = group;
+                        const sub = worksheet.addRow([String(raw[1]) + " Secc. " + String(raw[2])]);
+                        sub.eachCell(function(cell) {
+                            cell.fill = { type:"pattern", pattern:"solid", fgColor:{ argb:"FFD8E8F5" } };
+                            cell.font = { bold:true, color:{ argb:"FF0D2352" }, size:10 };
+                        });
+                        sub.height = 18;
+                        const rn = worksheet.rowCount;
+                        worksheet.mergeCells(rn, 1, rn, columnas.length);
+                    }
+                }
+                nRow++;
+                vals = [nRow, raw[0], raw[3], raw[4], raw[5], raw[6], raw[7], raw[8], raw[9]];
+            } else if (columnas[0] === "N\xb0") {
+                nRow++;
+                vals = [nRow].concat(raw);
+            } else {
+                nRow++;
+                vals = raw;
+            }
             const dataRow = worksheet.addRow(vals);
             dataRow.eachCell(function(cell) {
-                cell.fill = { type:"pattern", pattern:"solid", fgColor:{ argb: idx % 2 === 0 ? "FFF4F7FF" : "FFFFFFFF" } };
+                cell.fill = { type:"pattern", pattern:"solid", fgColor:{ argb: nRow % 2 === 0 ? "FFF4F7FF" : "FFFFFFFF" } };
                 cell.border = { top:{style:"thin",color:{argb:"FFE0E0E0"}}, left:{style:"thin",color:{argb:"FFE0E0E0"}}, bottom:{style:"thin",color:{argb:"FFE0E0E0"}}, right:{style:"thin",color:{argb:"FFE0E0E0"}} };
             });
         });
@@ -1622,7 +1768,6 @@ app.get("/api/dashboard/alertas-academicas", function(req, res) {
                     AND (SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END)
                          / NULLIF(COUNT(DISTINCT a.id), 0)) * 100 < 80)
             ORDER BY promedio ASC
-            LIMIT 15
         `;
 
         db.query(sql, [anioEscolar], function(err, rows) {
@@ -1763,6 +1908,65 @@ app.get("/api/db-check", function(req, res) {
                 });
             });
         });
+    });
+});
+
+// =============================================
+//  REPORTES JSON (para front-end)
+// =============================================
+app.get("/api/reportes/calificaciones", function(req, res) {
+    const aulaId = req.query.aulaId ? parseInt(req.query.aulaId) : null;
+    const params = aulaId ? [aulaId] : [];
+    const sql = `
+        SELECT e.nombre AS nombre_estudiante, e.grado, e.seccion, c.asignatura,
+               COALESCE(c.nota1,0) AS nota1, COALESCE(c.nota2,0) AS nota2,
+               COALESCE(c.nota3,0) AS nota3, COALESCE(c.nota4,0) AS nota4,
+               COALESCE(c.promedio_redondeado,0) AS promedio,
+               CASE WHEN c.promedio_redondeado>=70 THEN 'Aprobado'
+                    WHEN c.promedio_redondeado>0 THEN 'Recuperacion'
+                    ELSE '-' END AS condicion
+        FROM calificaciones c JOIN estudiantes e ON c.estudiante_id=e.id
+        WHERE e.activo=1 ${aulaId ? 'AND e.aula_id=?' : ''}
+        ORDER BY e.grado, e.seccion, SUBSTRING_INDEX(e.nombre,' ',-1), c.asignatura`;
+    db.query(sql, params, function(err, rows) {
+        if (err) return res.status(500).json({ error: "Error al obtener reporte de calificaciones." });
+        res.json(rows);
+    });
+});
+
+app.get("/api/reportes/asistencia-resumen", function(req, res) {
+    const aulaId = req.query.aulaId ? parseInt(req.query.aulaId) : null;
+    const params = aulaId ? [aulaId] : [];
+    const sql = `
+        SELECT e.nombre, e.grado, e.seccion,
+               SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END) AS presentes,
+               SUM(CASE WHEN a.estado='ausente' THEN 1 ELSE 0 END) AS ausentes,
+               SUM(CASE WHEN a.estado='tardanza' THEN 1 ELSE 0 END) AS tardanzas,
+               ROUND(SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END)/NULLIF(COUNT(DISTINCT a.id),0)*100,1) AS pct_asistencia
+        FROM estudiantes e LEFT JOIN asistencia a ON e.id=a.estudiante_id
+        WHERE e.activo=1 ${aulaId ? 'AND e.aula_id=?' : ''}
+        GROUP BY e.id, e.nombre, e.grado, e.seccion
+        ORDER BY e.grado, e.seccion, SUBSTRING_INDEX(e.nombre,' ',-1) ASC`;
+    db.query(sql, params, function(err, rows) {
+        if (err) return res.status(500).json({ error: "Error al obtener resumen de asistencia." });
+        res.json(rows);
+    });
+});
+
+app.get("/api/reportes/participaciones-resumen", function(req, res) {
+    const aulaId = req.query.aulaId ? parseInt(req.query.aulaId) : null;
+    const params = aulaId ? [aulaId] : [];
+    const sql = `
+        SELECT e.nombre, e.grado, e.seccion,
+               COALESCE(ROUND(AVG(NULLIF(p.puntuacion,0)),1),0) AS promedio_participacion,
+               COUNT(p.id) AS total_registros
+        FROM estudiantes e LEFT JOIN participaciones p ON e.id=p.estudiante_id
+        WHERE e.activo=1 ${aulaId ? 'AND e.aula_id=?' : ''}
+        GROUP BY e.id, e.nombre, e.grado, e.seccion
+        ORDER BY e.grado, e.seccion, SUBSTRING_INDEX(e.nombre,' ',-1) ASC`;
+    db.query(sql, params, function(err, rows) {
+        if (err) return res.status(500).json({ error: "Error al obtener resumen de participaciones." });
+        res.json(rows);
     });
 });
 

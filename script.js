@@ -521,6 +521,7 @@ function mostrarSeccion(nombre) {
     if (nombre === "calificaciones") cargarSelectEstudiantes();
     if (nombre === "asistencia")     cargarAsistencia();
     if (nombre === "participaciones") cargarAsistencia().then(() => seleccionarTabAsistencia('participaciones'));
+    if (nombre === "reportes")        inicializarReportes();
     if (nombre === "usuarios")       cargarTablaUsuarios();
     if (nombre === "configuracion")  cargarConfiguracion();
 }
@@ -568,6 +569,60 @@ async function cargarDashboard() {
 
     } catch (err) { console.error("Error dashboard:", err); }
 }
+
+// =============================================
+//  MODAL ALERTAS ACADÉMICAS
+// =============================================
+async function verAlertasAcademicas() {
+    const modal = document.getElementById('modal-alertas');
+    const contenido = document.getElementById('modal-alertas-contenido');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    contenido.innerHTML = '<p style="color:#666;text-align:center;padding:20px">Cargando...</p>';
+
+    try {
+        const data = await fetchCached(`${API}/dashboard/alertas-academicas`, 30000);
+        if (!data.length) {
+            contenido.innerHTML = '<p style="color:#4caf50;text-align:center;padding:20px;font-weight:600">✅ No hay estudiantes en situación de alerta.</p>';
+            return;
+        }
+        const filas = data.map((r, i) => {
+            const pBajo = r.promedio > 0 && r.promedio < 70;
+            const aBajo = r.asistencia !== null && r.asistencia < 80;
+            let motivo;
+            if (pBajo && aBajo) motivo = '<span style="color:#c62828">Promedio bajo + Ausentismo</span>';
+            else if (pBajo)     motivo = '<span style="color:#e65100">Promedio bajo (&lt; 70)</span>';
+            else                motivo = '<span style="color:#1565c0">Ausentismo (&lt; 80%)</span>';
+            const promedioStr = r.promedio > 0 ? r.promedio : '—';
+            return `<tr>
+                <td>${i + 1}</td>
+                <td><strong>${r.nombre}</strong></td>
+                <td>${r.grado}</td>
+                <td>${r.seccion}</td>
+                <td>${promedioStr}</td>
+                <td>${motivo}</td>
+            </tr>`;
+        }).join('');
+        contenido.innerHTML = `
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead><tr><th>N°</th><th>Nombre</th><th>Grado</th><th>Sección</th><th>Promedio</th><th>Motivo</th></tr></thead>
+                    <tbody>${filas}</tbody>
+                </table>
+            </div>`;
+    } catch (err) {
+        contenido.innerHTML = '<p style="color:#c62828;text-align:center;padding:20px">Error al cargar alertas.</p>';
+    }
+}
+
+function cerrarModalAlertas() {
+    const modal = document.getElementById('modal-alertas');
+    if (modal) modal.style.display = 'none';
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') cerrarModalAlertas();
+});
 
 // =============================================
 // Charts
@@ -1087,76 +1142,206 @@ document.getElementById("btnGuardarParticipaciones")?.addEventListener("click", 
 // =============================================
 //  REPORTES
 // =============================================
-async function generarReporte(tipo) {
-    const contenedor = document.getElementById("reporteContenido");
-    try {
-        let data = [];
-        let titulo = "";
-        let columnas = [];
-        let filas = "";
-
-        if (tipo === "estudiantes") {
-            const res = await fetch(`${API}/estudiantes`);
-            data = await res.json();
-            titulo = "Listado de Estudiantes";
-            columnas = ["Nombre","Matricula","Grado","Seccion","Tutor"];
-            filas = data.map(e =>
-                `<tr><td>${e.nombre}</td><td>${e.matricula}</td><td>${e.grado}</td><td>${e.seccion||"—"}</td><td>${e.tutor||"—"}</td></tr>`
-            ).join("");
-        } else if (tipo === "calificaciones") {
-            const res = await fetch(`${API}/calificaciones`);
-            data = await res.json();
-            titulo = "Reporte de Calificaciones";
-            columnas = ["Estudiante","Asignatura","P1","P2","P3","P4","Promedio"];
-            filas = data.map(c =>
-                `<tr><td>${c.nombre_estudiante}</td><td>${c.asignatura}</td><td>${c.nota1 ?? '—'}</td><td>${c.nota2 ?? '—'}</td><td>${c.nota3 ?? '—'}</td><td>${c.nota4 ?? '—'}</td><td><strong>${c.promedio ?? '—'}</strong></td></tr>`
-            ).join("");
-        } else if (tipo === "asistencia") {
-            const res = await fetch(`${API}/asistencia`);
-            data = await res.json();
-            titulo = "Reporte de Asistencia";
-            columnas = ["Estudiante","Fecha","Estado","Observacion"];
-            filas = data.map(a =>
-                `<tr><td>${a.nombre_estudiante}</td>
-                 <td>${new Date(a.fecha).toLocaleDateString("es-DO",{year:"numeric",month:"long",day:"numeric"})}</td>
-                 <td>${a.estado.charAt(0).toUpperCase()+a.estado.slice(1)}</td>
-                 <td>${a.observacion||"—"}</td></tr>`
-            ).join("");
-        }
-
-        if (data.length === 0) {
-            contenedor.innerHTML = '<div class="msg-success" style="background:#fff3e0;color:#e65100;border-color:#ffe0b2">No hay datos para mostrar.</div>';
-            return;
-        }
-
-        const thCols = columnas.map(c => `<th>${c}</th>`).join("");
-
-        contenedor.innerHTML = `
-            <div class="panel">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                    <h3 class="panel-title" style="margin:0">${titulo} (${data.length} registros)</h3>
-                    <div style="display:flex;gap:10px">
-                        <button onclick="exportar('pdf','${tipo}')" 
-                            style="background:#c62828;color:#fff;padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;width:auto">
-                            Exportar PDF
-                        </button>
-                        <button onclick="exportar('excel','${tipo}')"
-                            style="background:#2e7d32;color:#fff;padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;width:auto">
-                            Exportar Excel
-                        </button>
-                    </div>
-                </div>
-                <table class="data-table">
-                    <thead><tr>${thCols}</tr></thead>
-                    <tbody>${filas}</tbody>
-                </table>
+function inicializarReportes() {
+    const rol = localStorage.getItem('userRol') || (usuarioActual && usuarioActual.rol);
+    const grid = document.getElementById('reports-grid');
+    if (!grid) return;
+    document.getElementById('reporteContenido').innerHTML = '';
+    if (rol === 'docente') {
+        grid.innerHTML = `
+            <div class="report-card" onclick="generarReporte('calificaciones')">
+                <div class="report-icon">&#128221;</div>
+                <h4>Reporte de Notas</h4>
+                <p>Calificaciones del aula activa</p>
+            </div>
+            <div class="report-card" onclick="generarReporte('asistencia-resumen')">
+                <div class="report-icon">&#128197;</div>
+                <h4>Reporte de Asistencia</h4>
+                <p>Resumen de asistencia del aula activa</p>
+            </div>
+            <div class="report-card" onclick="generarReporte('participaciones-resumen')">
+                <div class="report-icon">&#11088;</div>
+                <h4>Reporte de Participaciones</h4>
+                <p>Resumen de participaciones del aula activa</p>
             </div>`;
-
-    } catch (err) { console.error("Error reporte:", err); }
+    } else {
+        grid.innerHTML = `
+            <div class="report-card" onclick="generarReporte('estudiantes')">
+                <div class="report-icon">&#128100;</div>
+                <h4>Listado de Estudiantes</h4>
+                <p>Ver todos los estudiantes registrados</p>
+            </div>
+            <div class="report-card" onclick="generarReporte('calificaciones')">
+                <div class="report-icon">&#128221;</div>
+                <h4>Reporte de Notas</h4>
+                <p>Calificaciones por asignatura y periodo</p>
+            </div>
+            <div class="report-card" onclick="generarReporte('asistencia-resumen')">
+                <div class="report-icon">&#128197;</div>
+                <h4>Reporte de Asistencia</h4>
+                <p>Historial de asistencia por aula</p>
+            </div>
+            <div class="report-card" onclick="generarReporte('participaciones-resumen')">
+                <div class="report-icon">&#11088;</div>
+                <h4>Reporte de Participaciones</h4>
+                <p>Resumen de participaciones por aula</p>
+            </div>`;
+    }
 }
 
-function exportar(formato, tipo) {
-    window.open(`${API}/exportar/${formato}/${tipo}`, "_blank");
+async function generarReporte(tipo, aulaFiltroId) {
+    const contenedor = document.getElementById("reporteContenido");
+    const rol = localStorage.getItem('userRol') || (usuarioActual && usuarioActual.rol);
+    const esDocente = rol === 'docente';
+    const aulaId = aulaFiltroId || (esDocente && aulaSeleccionada ? aulaSeleccionada.id : null);
+    const aulaParam = aulaId ? String(aulaId) : '';
+
+    contenedor.innerHTML = '<p style="color:#666;padding:20px;text-align:center">Cargando...</p>';
+
+    function botonesExport() {
+        return `<div style="display:flex;gap:10px">
+            <button onclick="exportar('pdf','${tipo}','${aulaParam}')"
+                style="background:#c62828;color:#fff;padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
+                Exportar PDF
+            </button>
+            <button onclick="exportar('excel','${tipo}','${aulaParam}')"
+                style="background:#2e7d32;color:#fff;padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
+                Exportar Excel
+            </button>
+        </div>`;
+    }
+
+    function aulaLabel() {
+        if (!aulaId) return '';
+        if (esDocente && aulaSeleccionada) return ` — ${aulaSeleccionada.nombre || aulaSeleccionada.grado + ' ' + aulaSeleccionada.seccion}`;
+        const a = aulasCache.find(x => String(x.id) === String(aulaId));
+        return a ? ` — ${a.grado} Secc. ${a.seccion}` : '';
+    }
+
+    try {
+        if (tipo === "estudiantes") {
+            const data = await fetchCached(`${API}/estudiantes`, 60000);
+            const filas = data.map((e, i) =>
+                `<tr><td>${i+1}</td><td>${e.nombre}</td><td>${e.matricula}</td><td>${e.grado}</td><td>${e.seccion||"—"}</td><td>${e.tutor||"—"}</td></tr>`
+            ).join("") || '<tr><td colspan="6" class="empty-row">Sin datos</td></tr>';
+            contenedor.innerHTML = `<div class="panel">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                    <h3 class="panel-title" style="margin:0">Listado de Estudiantes (${data.length})</h3>
+                    ${botonesExport()}
+                </div>
+                <div class="table-wrap"><table class="data-table">
+                    <thead><tr><th>N°</th><th>Nombre</th><th>Matrícula</th><th>Grado</th><th>Sección</th><th>Tutor</th></tr></thead>
+                    <tbody>${filas}</tbody>
+                </table></div></div>`;
+
+        } else if (tipo === "calificaciones") {
+            const url = aulaId ? `${API}/reportes/calificaciones?aulaId=${aulaId}` : `${API}/reportes/calificaciones`;
+            const data = await fetchCached(url, 30000);
+            let filas = "", n = 0, curGroup = null;
+            data.forEach(c => {
+                if (!aulaId) {
+                    const g = `${c.grado}|${c.seccion}`;
+                    if (g !== curGroup) {
+                        curGroup = g;
+                        filas += `<tr style="background:#dde8f5"><td colspan="9" style="font-weight:700;color:#0d2352;padding:8px 12px">
+                            ${c.grado} — Sección ${c.seccion}</td></tr>`;
+                    }
+                }
+                n++;
+                const cond = c.condicion === 'Aprobado'
+                    ? `<span style="color:#2e7d32;font-weight:600">Aprobado</span>`
+                    : c.condicion === 'Recuperacion'
+                        ? `<span style="color:#e65100;font-weight:600">Recuperación</span>`
+                        : '—';
+                filas += `<tr><td>${n}</td><td>${c.nombre_estudiante}</td><td>${c.asignatura}</td>
+                    <td>${c.nota1||'—'}</td><td>${c.nota2||'—'}</td><td>${c.nota3||'—'}</td><td>${c.nota4||'—'}</td>
+                    <td><strong>${c.promedio||'—'}</strong></td><td>${cond}</td></tr>`;
+            });
+            contenedor.innerHTML = `<div class="panel">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                    <h3 class="panel-title" style="margin:0">Reporte de Notas${aulaLabel()} (${data.length} registros)</h3>
+                    ${botonesExport()}
+                </div>
+                <div class="table-wrap"><table class="data-table">
+                    <thead><tr><th>N°</th><th>Estudiante</th><th>Asignatura</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>Promedio</th><th>Condición</th></tr></thead>
+                    <tbody>${filas || '<tr><td colspan="9" class="empty-row">Sin datos</td></tr>'}</tbody>
+                </table></div></div>`;
+
+        } else if (tipo === "asistencia-resumen") {
+            const url = aulaId ? `${API}/reportes/asistencia-resumen?aulaId=${aulaId}` : `${API}/reportes/asistencia-resumen`;
+            const data = await fetchCached(url, 30000);
+            let aulaFilter = "";
+            if (!esDocente) {
+                const aulas = await fetchCached(`${API}/aulas`, 60000);
+                const opts = aulas.map(a =>
+                    `<option value="${a.id}" ${String(aulaId) === String(a.id) ? 'selected' : ''}>${a.grado} "${a.seccion}" ${a.nombre ? '— '+a.nombre : ''}</option>`
+                ).join('');
+                aulaFilter = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+                    <label style="font-size:13px;font-weight:600;color:#0d2352">Filtrar por aula:</label>
+                    <select onchange="generarReporte('asistencia-resumen',this.value||null)"
+                        style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                        <option value="">Todas las aulas</option>${opts}
+                    </select></div>`;
+            }
+            let n = 0;
+            const filas = data.map(e => {
+                n++;
+                return `<tr><td>${n}</td><td>${e.nombre}</td><td>${e.presentes||0}</td><td>${e.ausentes||0}</td>
+                    <td>${e.tardanzas||0}</td><td>${e.pct_asistencia !== null ? e.pct_asistencia+'%' : '—'}</td></tr>`;
+            }).join('') || '<tr><td colspan="6" class="empty-row">Sin datos</td></tr>';
+            contenedor.innerHTML = `<div class="panel">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                    <h3 class="panel-title" style="margin:0">Reporte de Asistencia${aulaLabel()} (${data.length} estudiantes)</h3>
+                    ${botonesExport()}
+                </div>
+                ${aulaFilter}
+                <div class="table-wrap"><table class="data-table">
+                    <thead><tr><th>N°</th><th>Nombre</th><th>Presentes</th><th>Ausentes</th><th>Tardanzas</th><th>% Asistencia</th></tr></thead>
+                    <tbody>${filas}</tbody>
+                </table></div></div>`;
+
+        } else if (tipo === "participaciones-resumen") {
+            const url = aulaId ? `${API}/reportes/participaciones-resumen?aulaId=${aulaId}` : `${API}/reportes/participaciones-resumen`;
+            const data = await fetchCached(url, 30000);
+            let aulaFilter = "";
+            if (!esDocente) {
+                const aulas = await fetchCached(`${API}/aulas`, 60000);
+                const opts = aulas.map(a =>
+                    `<option value="${a.id}" ${String(aulaId) === String(a.id) ? 'selected' : ''}>${a.grado} "${a.seccion}" ${a.nombre ? '— '+a.nombre : ''}</option>`
+                ).join('');
+                aulaFilter = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+                    <label style="font-size:13px;font-weight:600;color:#0d2352">Filtrar por aula:</label>
+                    <select onchange="generarReporte('participaciones-resumen',this.value||null)"
+                        style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                        <option value="">Todas las aulas</option>${opts}
+                    </select></div>`;
+            }
+            let n = 0;
+            const filas = data.map(e => {
+                n++;
+                return `<tr><td>${n}</td><td>${e.nombre}</td><td>${e.promedio_participacion||'—'}</td><td>${e.total_registros||0}</td></tr>`;
+            }).join('') || '<tr><td colspan="4" class="empty-row">Sin datos</td></tr>';
+            contenedor.innerHTML = `<div class="panel">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                    <h3 class="panel-title" style="margin:0">Reporte de Participaciones${aulaLabel()} (${data.length} estudiantes)</h3>
+                    ${botonesExport()}
+                </div>
+                ${aulaFilter}
+                <div class="table-wrap"><table class="data-table">
+                    <thead><tr><th>N°</th><th>Nombre</th><th>Promedio Participación</th><th>Total Registros</th></tr></thead>
+                    <tbody>${filas}</tbody>
+                </table></div></div>`;
+        }
+
+    } catch (err) {
+        contenedor.innerHTML = '<div style="padding:20px;color:#c62828">Error al cargar datos del reporte.</div>';
+        console.error("Error reporte:", err);
+    }
+}
+
+function exportar(formato, tipo, aulaId) {
+    const params = aulaId ? `?aulaId=${aulaId}` : '';
+    window.open(`${API}/exportar/${formato}/${tipo}${params}`, "_blank");
 }
 
 function exportarBoletin(formato, estudianteId) {
