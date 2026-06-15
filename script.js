@@ -1163,6 +1163,11 @@ function inicializarReportes() {
                 <div class="report-icon">&#128197;</div>
                 <h4>Reporte de Asistencia</h4>
                 <p>Resumen de asistencia del aula activa</p>
+            </div>
+            <div class="report-card" onclick="generarReporte('participaciones-resumen')">
+                <div class="report-icon">&#11088;</div>
+                <h4>Reporte de Participaciones</h4>
+                <p>Resumen de participaciones del aula activa</p>
             </div>`;
     } else {
         grid.innerHTML = `
