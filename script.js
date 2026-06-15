@@ -382,7 +382,7 @@ function aplicarVistaRol(rol) {
     const busquedaLink = document.querySelector('[data-section="busqueda"]');
 
     if (rol === 'docente') {
-        const seccionesDocente = ['inicio', 'busqueda', 'asistencia', 'calificaciones', 'participaciones'];
+        const seccionesDocente = ['inicio', 'busqueda', 'asistencia', 'calificaciones', 'participaciones', 'reportes'];
         navItems.forEach(item => {
             const seccion = item.getAttribute('data-section');
             item.style.display = seccionesDocente.includes(seccion) ? 'flex' : 'none';
@@ -1149,6 +1149,11 @@ function inicializarReportes() {
     document.getElementById('reporteContenido').innerHTML = '';
     if (rol === 'docente') {
         grid.innerHTML = `
+            <div class="report-card" onclick="generarReporte('estudiantes')">
+                <div class="report-icon">&#128100;</div>
+                <h4>Listado de Estudiantes</h4>
+                <p>Estudiantes del aula activa</p>
+            </div>
             <div class="report-card" onclick="generarReporte('calificaciones')">
                 <div class="report-icon">&#128221;</div>
                 <h4>Reporte de Notas</h4>
@@ -1158,11 +1163,6 @@ function inicializarReportes() {
                 <div class="report-icon">&#128197;</div>
                 <h4>Reporte de Asistencia</h4>
                 <p>Resumen de asistencia del aula activa</p>
-            </div>
-            <div class="report-card" onclick="generarReporte('participaciones-resumen')">
-                <div class="report-icon">&#11088;</div>
-                <h4>Reporte de Participaciones</h4>
-                <p>Resumen de participaciones del aula activa</p>
             </div>`;
     } else {
         grid.innerHTML = `
@@ -1220,13 +1220,17 @@ async function generarReporte(tipo, aulaFiltroId) {
 
     try {
         if (tipo === "estudiantes") {
-            const data = await fetchCached(`${API}/estudiantes`, 60000);
+            let data = await fetchCached(`${API}/estudiantes`, 60000);
+            if (esDocente && aulaSeleccionada) {
+                data = data.filter(e => String(e.aula_id) === String(aulaSeleccionada.id));
+            }
             const filas = data.map((e, i) =>
                 `<tr><td>${i+1}</td><td>${e.nombre}</td><td>${e.matricula}</td><td>${e.grado}</td><td>${e.seccion||"—"}</td><td>${e.tutor||"—"}</td></tr>`
             ).join("") || '<tr><td colspan="6" class="empty-row">Sin datos</td></tr>';
+            const label = aulaLabel();
             contenedor.innerHTML = `<div class="panel">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                    <h3 class="panel-title" style="margin:0">Listado de Estudiantes (${data.length})</h3>
+                    <h3 class="panel-title" style="margin:0">Listado de Estudiantes${label} (${data.length})</h3>
                     ${botonesExport()}
                 </div>
                 <div class="table-wrap"><table class="data-table">
@@ -1283,12 +1287,21 @@ async function generarReporte(tipo, aulaFiltroId) {
                         <option value="">Todas las aulas</option>${opts}
                     </select></div>`;
             }
-            let n = 0;
-            const filas = data.map(e => {
+            let n = 0, curGrp = null;
+            let filas = '';
+            data.forEach(e => {
+                if (!aulaId) {
+                    const g = `${e.grado}|${e.seccion}`;
+                    if (g !== curGrp) {
+                        curGrp = g;
+                        filas += `<tr style="background:#dde8f5"><td colspan="6" style="font-weight:700;color:#0d2352;padding:8px 12px">${e.grado} — Sección ${e.seccion}</td></tr>`;
+                    }
+                }
                 n++;
-                return `<tr><td>${n}</td><td>${e.nombre}</td><td>${e.presentes||0}</td><td>${e.ausentes||0}</td>
+                filas += `<tr><td>${n}</td><td>${e.nombre}</td><td>${e.presentes||0}</td><td>${e.ausentes||0}</td>
                     <td>${e.tardanzas||0}</td><td>${e.pct_asistencia !== null ? e.pct_asistencia+'%' : '—'}</td></tr>`;
-            }).join('') || '<tr><td colspan="6" class="empty-row">Sin datos</td></tr>';
+            });
+            if (!filas) filas = '<tr><td colspan="6" class="empty-row">Sin datos</td></tr>';
             contenedor.innerHTML = `<div class="panel">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
                     <h3 class="panel-title" style="margin:0">Reporte de Asistencia${aulaLabel()} (${data.length} estudiantes)</h3>
@@ -1316,11 +1329,20 @@ async function generarReporte(tipo, aulaFiltroId) {
                         <option value="">Todas las aulas</option>${opts}
                     </select></div>`;
             }
-            let n = 0;
-            const filas = data.map(e => {
-                n++;
-                return `<tr><td>${n}</td><td>${e.nombre}</td><td>${e.promedio_participacion||'—'}</td><td>${e.total_registros||0}</td></tr>`;
-            }).join('') || '<tr><td colspan="4" class="empty-row">Sin datos</td></tr>';
+            let n2 = 0, curGrp2 = null;
+            let filas2 = '';
+            data.forEach(e => {
+                if (!aulaId) {
+                    const g = `${e.grado}|${e.seccion}`;
+                    if (g !== curGrp2) {
+                        curGrp2 = g;
+                        filas2 += `<tr style="background:#dde8f5"><td colspan="4" style="font-weight:700;color:#0d2352;padding:8px 12px">${e.grado} — Sección ${e.seccion}</td></tr>`;
+                    }
+                }
+                n2++;
+                filas2 += `<tr><td>${n2}</td><td>${e.nombre}</td><td>${e.promedio_participacion||'—'}</td><td>${e.total_registros||0}</td></tr>`;
+            });
+            if (!filas2) filas2 = '<tr><td colspan="4" class="empty-row">Sin datos</td></tr>';
             contenedor.innerHTML = `<div class="panel">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
                     <h3 class="panel-title" style="margin:0">Reporte de Participaciones${aulaLabel()} (${data.length} estudiantes)</h3>
@@ -1329,7 +1351,7 @@ async function generarReporte(tipo, aulaFiltroId) {
                 ${aulaFilter}
                 <div class="table-wrap"><table class="data-table">
                     <thead><tr><th>N°</th><th>Nombre</th><th>Promedio Participación</th><th>Total Registros</th></tr></thead>
-                    <tbody>${filas}</tbody>
+                    <tbody>${filas2}</tbody>
                 </table></div></div>`;
         }
 

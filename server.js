@@ -1737,56 +1737,44 @@ app.get("/api/dashboard/distribucion-notas", function(req, res) {
 });
 
 app.get("/api/dashboard/alertas-academicas", function(req, res) {
-    db.query("SELECT anio_escolar FROM configuracion LIMIT 1", function(err, config) {
-        const anioEscolar = config && config.length ? config[0].anio_escolar : "2025-2026";
+    const sql = `
+        SELECT
+            e.id,
+            e.nombre,
+            e.grado,
+            e.seccion,
+            ROUND(AVG(CASE WHEN c.promedio_redondeado > 0 THEN c.promedio_redondeado ELSE NULL END), 1) AS promedio,
+            ROUND(
+                SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END) /
+                NULLIF(COUNT(DISTINCT a.id), 0) * 100, 1
+            ) AS asistencia
+        FROM estudiantes e
+        LEFT JOIN calificaciones c ON e.id = c.estudiante_id AND c.promedio_redondeado > 0
+        LEFT JOIN asistencia a ON e.id = a.estudiante_id
+        WHERE e.activo = 1
+        GROUP BY e.id, e.nombre, e.grado, e.seccion
+        HAVING
+            (COUNT(c.id) > 0 AND AVG(CASE WHEN c.promedio_redondeado > 0 THEN c.promedio_redondeado ELSE NULL END) < 70)
+            OR (COUNT(DISTINCT a.id) > 0
+                AND SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END) /
+                    NULLIF(COUNT(DISTINCT a.id), 0) * 100 < 80)
+        ORDER BY 5 ASC
+    `;
 
-        const sql = `
-            SELECT
-                e.id,
-                e.nombre,
-                e.grado,
-                e.seccion,
-                ROUND(AVG(c.promedio_redondeado), 1) as promedio,
-                ROUND(
-                    (SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END) /
-                     NULLIF(COUNT(DISTINCT a.id), 0)) * 100, 1
-                ) as asistencia,
-                CASE
-                    WHEN ROUND(AVG(c.promedio_redondeado), 1) < 60 THEN 'critico'
-                    WHEN ROUND(AVG(c.promedio_redondeado), 1) < 70 THEN 'bajo'
-                    ELSE 'riesgo'
-                END as nivel_alerta
-            FROM estudiantes e
-            LEFT JOIN calificaciones c ON e.id = c.estudiante_id
-                AND c.anio_escolar = ? AND c.promedio_redondeado > 0
-            LEFT JOIN asistencia a ON e.id = a.estudiante_id
-            WHERE e.activo = 1
-            GROUP BY e.id, e.nombre, e.grado, e.seccion
-            HAVING
-                (COUNT(c.id) > 0 AND AVG(c.promedio_redondeado) < 70)
-                OR (COUNT(DISTINCT a.id) > 0
-                    AND (SUM(CASE WHEN a.estado='presente' THEN 1 ELSE 0 END)
-                         / NULLIF(COUNT(DISTINCT a.id), 0)) * 100 < 80)
-            ORDER BY promedio ASC
-        `;
-
-        db.query(sql, [anioEscolar], function(err, rows) {
-            if (err) {
-                return res.status(500).json({ error: "Error al obtener alertas académicas." });
-            }
-
-            const alertas = rows.map(r => ({
-                id: r.id,
-                nombre: r.nombre,
-                grado: r.grado,
-                seccion: r.seccion || "—",
-                promedio: r.promedio || 0,
-                asistencia: r.asistencia || 0,
-                nivel_alerta: r.nivel_alerta
-            }));
-
-            res.json(alertas);
-        });
+    db.query(sql, function(err, rows) {
+        if (err) {
+            console.error("Error en alertas-academicas:", err.message, err.sqlMessage || "");
+            return res.status(500).json({ error: "Error al obtener alertas academicas.", detalle: err.message });
+        }
+        const alertas = (rows || []).map(r => ({
+            id: r.id,
+            nombre: r.nombre,
+            grado: r.grado,
+            seccion: r.seccion || "—",
+            promedio: r.promedio,
+            asistencia: r.asistencia
+        }));
+        res.json(alertas);
     });
 });
 
